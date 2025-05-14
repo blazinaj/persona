@@ -2,7 +2,9 @@
 
 Create, customize, and manage AI agents with different personalities and skill sets. Live demo: [View Demo](https://incandescent-llama-54a88f.netlify.app)
 
-![Persona Dashboard](https://images.pexels.com/photos/8386440/pexels-photo-8386440.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1)
+## 🤖 AI-Generated Prototype
+
+This application is a prototype generated using artificial intelligence. It demonstrates the potential of AI-assisted development in creating sophisticated, production-ready applications. While the core functionality and design patterns are solid, this prototype serves as a foundation that can be further enhanced and customized for specific business needs.
 
 ## Features
 
