@@ -1,7 +1,10 @@
 /**
  * Format a date to display in a readable format
  */
-export const formatDate = (date: Date): string => {
+export const formatDate = (dateStr: string | Date): string => {
+  // Convert string to Date if needed
+  const date = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
+  
   // If it's today, show "Today at HH:MM"
   const today = new Date();
   const yesterday = new Date(today);
@@ -28,4 +31,36 @@ export const formatDate = (date: Date): string => {
     month: 'short', 
     day: 'numeric' 
   });
+};
+
+/**
+ * Format a date relative to now (e.g., "2 hours ago", "3 days ago")
+ */
+export const formatRelativeTime = (dateStr: string | Date): string => {
+  // Convert string to Date if needed
+  const date = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
+  
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) {
+    return 'just now';
+  }
+  
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) {
+    return `${diffInMinutes}m ago`;
+  }
+  
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) {
+    return `${diffInHours}h ago`;
+  }
+  
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) {
+    return `${diffInDays}d ago`;
+  }
+  
+  return formatDate(date);
 };

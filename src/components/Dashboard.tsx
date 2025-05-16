@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
-import { Search, Filter, Plus, X } from 'lucide-react';
+import React, { useState, useEffect, useContext } from 'react';
+import { Search, Filter, Plus, X, Grid, List, SortAsc, Clock } from 'lucide-react';
 import { Persona } from '../types';
 import PersonaCard from './PersonaCard';
 import Button from './ui/Button';
+import { supabase } from '../lib/supabase';
+import { AuthContext } from '../lib/AuthContext';
+
+type ViewMode = 'grid' | 'list';
+type SortOption = 'name' | 'created' | 'modified';
 
 interface DashboardProps {
   personas: Persona[];
@@ -21,17 +26,89 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onDeletePersona,
   onViewPersona,
 }) => {
+  const { user } = useContext(AuthContext);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [sortBy, setSortBy] = useState<SortOption>('modified');
   const [showFilters, setShowFilters] = useState(false);
+  const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
+  const [favorites, setFavorites] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetchViewsAndFavorites();
+  }, [personas]);
+
+  const fetchViewsAndFavorites = async () => {
+    if (!personas.length || !user?.id) return;
+
+    try {
+      // Fetch view counts
+      const { data: views } = await supabase
+        .from('persona_views')
+        .select('persona_id')
+        .in('persona_id', personas.map(p => p.id));
+
+      const counts = views?.reduce((acc, view) => {
+        acc[view.persona_id] = (acc[view.persona_id] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>) || {};
+
+      setViewCounts(counts);
+
+      // Fetch user's favorites
+      const { data: favs } = await supabase
+        .from('persona_favorites')
+        .select('persona_id')
+        .eq('user_id', user.id);
+
+      setFavorites(favs?.map(f => f.persona_id) || []);
+    } catch (error) {
+      console.error('Error fetching views and favorites:', error);
+    }
+  };
+
+  const handleToggleFavorite = async (personaId: string) => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .rpc('toggle_persona_favorite', {
+          persona_id_input: personaId
+        });
+
+      if (error) throw error;
+
+      // Update local state
+      setFavorites(prev => 
+        data ? [...prev, personaId] : prev.filter(id => id !== personaId)
+      );
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    }
+  };
 
   // Get all unique tags from personas
   const allTags = Array.from(
     new Set(personas.flatMap((persona) => persona.tags))
   );
 
+  // Sort personas
+  const sortedPersonas = [...personas].sort((a, b) => {
+    switch (sortBy) {
+      case 'name':
+        return a.name.localeCompare(b.name);
+      case 'created':
+        return b.created.getTime() - a.created.getTime();
+      case 'modified':
+        return b.lastModified.getTime() - a.lastModified.getTime();
+      default:
+        return 0;
+    }
+  });
+
   // Filter personas based on search term and active filters
-  const filteredPersonas = personas.filter((persona) => {
+  const filteredPersonas = sortedPersonas.filter((persona) => {
     const matchesSearch =
       searchTerm === '' ||
       persona.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -58,26 +135,52 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8 pb-24 md:pb-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Personas</h1>
+        <div className="flex-1">
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">My Personas</h1>
           <p className="text-gray-600 mt-1">
             Manage and customize your AI personas
           </p>
         </div>
         
-        <Button 
-          variant="primary" 
-          leftIcon={<Plus size={16} />}
-          onClick={onCreatePersona}
-        >
-          Create New Persona
-        </Button>
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2 p-1 bg-gray-100 rounded-lg">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded ${
+                viewMode === 'grid'
+                  ? 'bg-white shadow-sm text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Grid size={18} />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded ${
+                viewMode === 'list'
+                  ? 'bg-white shadow-sm text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <List size={18} />
+            </button>
+          </div>
+          
+          <Button 
+            variant="primary" 
+            leftIcon={<Plus size={16} />}
+            className="w-full md:w-auto"
+            onClick={onCreatePersona}
+          >
+            Create New Persona
+          </Button>
+        </div>
       </div>
 
       <div className="mb-8">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row items-center gap-4">
           <div className="relative flex-grow">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search size={18} className="text-gray-400" />
@@ -85,24 +188,45 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <input
               type="text"
               placeholder="Search personas..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="block w-full pl-10 pr-3 py-3 md:py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+              >
+                <X size={16} className="text-gray-400 hover:text-gray-600" />
+              </button>
+            )}
           </div>
           
-          <Button
-            variant="outline"
-            leftIcon={<Filter size={16} />}
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            Filter
-            {activeFilters.length > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-xs bg-blue-100 text-blue-700 rounded-full">
-                {activeFilters.length}
-              </span>
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="w-px h-6 bg-gray-300 hidden sm:block" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="rounded-lg border border-gray-300 py-3 md:py-2 pl-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="modified">Last Modified</option>
+              <option value="created">Date Created</option>
+              <option value="name">Name</option>
+            </select>
+            <Button
+              variant="outline"
+              leftIcon={<Filter size={16} />}
+              onClick={() => setShowFilters(!showFilters)}
+              className="hidden sm:inline-flex"
+            >
+              Filter
+              {activeFilters.length > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                  {activeFilters.length}
+                </span>
+              )}
+            </Button>
+          </div>
         </div>
         
         {/* Filter tags */}
@@ -180,11 +304,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className={
+          viewMode === 'grid'
+            ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6'
+            : 'space-y-4'
+        }>
           {filteredPersonas.map((persona) => (
             <PersonaCard
               key={persona.id}
               persona={persona}
+              viewMode={viewMode}
+              viewCount={viewCounts[persona.id] || 0}
+              isFavorited={favorites.includes(persona.id)}
+              onToggleFavorite={handleToggleFavorite}
               onEdit={onEditPersona}
               onDuplicate={onDuplicatePersona}
               onDelete={onDeletePersona}

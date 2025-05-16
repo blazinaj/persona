@@ -1,6 +1,6 @@
 # Persona - AI Agent Creation Platform
 
-Create, customize, and manage AI agents with different personalities and skill sets. Live demo: [View Demo](https://incandescent-llama-54a88f.netlify.app)
+Create, customize, and manage AI agents with different personalities and skill sets. Live demo: [View Demo](https://personify.mobi)
 
 ## 🤖 AI-Generated Prototype
 
@@ -11,9 +11,15 @@ This application is a prototype generated using artificial intelligence. It demo
 - **Create Custom AI Personas**: Design AI agents with unique personalities, knowledge areas, and communication styles
 - **Persona Management**: Edit, duplicate, and delete personas
 - **Rich Persona Details**: Define traits, knowledge areas, example interactions, and more
+- **Embeddable Chat Widget**: Easily embed your public personas into any website
+- **Image Generation**: Generate images using natural language descriptions
+- **Smart Suggestions**: Context-aware chat suggestions for better interactions
+- **Conversation Management**: Save, organize, and continue multiple conversations
+- **Message Actions**: Copy messages and download generated images
 - **Responsive Design**: Fully responsive interface that works on all devices
 - **Modern UI**: Beautiful, intuitive interface built with Tailwind CSS
 - **Type Safety**: Built with TypeScript for enhanced reliability
+- **Subscription Plans**: Flexible usage-based pricing with free trial option
 
 ## Tech Stack
 
@@ -34,6 +40,8 @@ src/
 │   ├── ui/            # Reusable UI components
 │   └── ...
 ├── data/              # Mock data and constants
+├── lib/               # Core utilities and services
+├── pages/             # Page components
 ├── types/             # TypeScript type definitions
 ├── utils/             # Utility functions
 └── App.tsx            # Main application component
@@ -52,11 +60,19 @@ src/
 ### Persona Creation
 - Name and description
 - Avatar image upload
+- Visibility settings (private/unlisted/public)
 - Personality trait selection
 - Knowledge area definition
 - Communication style configuration
 - Example interactions
-- Public/private visibility setting
+
+### Chat Features
+- Real-time conversations
+- Image generation capabilities
+- Smart context-aware suggestions
+- Message copying and image downloads
+- Conversation history and management
+- Fullscreen chat mode
 
 ### Persona Management
 - View detailed information
@@ -64,6 +80,12 @@ src/
 - Create duplicates
 - Delete personas
 - Filter and search functionality
+
+### Embedding
+- Generate embed code for public personas
+- Responsive chat widget
+- Customizable appearance
+- Cross-origin support
 
 ### UI/UX Features
 - Responsive design
@@ -90,13 +112,14 @@ src/
 
 ## Future Enhancements
 
-- User authentication and authorization
-- Real-time chat with AI personas
+- Advanced chat capabilities
+- Custom widget themes
 - Persona sharing and marketplace
 - Advanced customization options
 - Integration with various AI models
 - Analytics and usage tracking
 - Collaborative features
+- Team workspaces
 
 ## Contributing
 
