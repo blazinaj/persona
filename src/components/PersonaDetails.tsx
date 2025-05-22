@@ -8,7 +8,9 @@ import { AuthContext } from '../lib/AuthContext';
 import { Chat } from './Chat';
 import { DetailsPanel } from './DetailsPanel';
 import { IntegrationModal } from './IntegrationModal';
+import { FunctionModal } from './FunctionModal';
 import { IntegrationsPanel } from './IntegrationsPanel';
+import { FunctionsPanel } from './FunctionsPanel';
 import { ConversationsPanel } from './ConversationsPanel';
 import { EmbedModal } from './EmbedModal';
 import Button from './ui/Button';
@@ -33,6 +35,9 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
   const [isFavorited, setIsFavorited] = useState(false);
   const [viewCount, setViewCount] = useState(0);
   const [activePanel, setActivePanel] = useState<'details' | 'integrations' | null>(null);
+  const [functions, setFunctions] = useState<any[]>([]);
+  const [isAddingFunction, setIsAddingFunction] = useState(false);
+  const [editingFunction, setEditingFunction] = useState<any>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [isAddingIntegration, setIsAddingIntegration] = useState(false);
   const [editingIntegration, setEditingIntegration] = useState<Integration | null>(null);
@@ -136,8 +141,99 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
   useEffect(() => {
     if (id) {
       fetchIntegrations();
+      fetchFunctions();
     }
   }, [id]);
+
+  const fetchFunctions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('persona_functions')
+        .select('*')
+        .eq('persona_id', id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setFunctions(data || []);
+    } catch (error) {
+      console.error('Error fetching functions:', error);
+    }
+  };
+
+  const handleCreateFunction = async (data: any) => {
+    try {
+      const { error } = await supabase
+        .from('persona_functions')
+        .insert({
+          persona_id: id,
+          name: data.name,
+          description: data.description,
+          code: data.code,
+          is_active: data.is_active,
+          user_id: user?.id
+        });
+
+      if (error) throw error;
+      await fetchFunctions();
+      setIsAddingFunction(false);
+    } catch (error) {
+      console.error('Error creating function:', error);
+    }
+  };
+
+  const handleUpdateFunction = async (functionId: string, data: any) => {
+    try {
+      const { error } = await supabase
+        .from('persona_functions')
+        .update({
+          name: data.name,
+          description: data.description,
+          code: data.code,
+          is_active: data.is_active
+        })
+        .eq('id', functionId);
+
+      if (error) throw error;
+      await fetchFunctions();
+      setEditingFunction(null);
+    } catch (error) {
+      console.error('Error updating function:', error);
+    }
+  };
+
+  const handleDeleteFunction = async (functionId: string) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this function? This action cannot be undone."
+    );
+    
+    if (confirmDelete) {
+      try {
+        const { error } = await supabase
+          .from('persona_functions')
+          .delete()
+          .eq('id', functionId);
+
+        if (error) throw error;
+        await fetchFunctions();
+      } catch (error) {
+        console.error('Error deleting function:', error);
+      }
+    }
+  };
+
+  const handleToggleFunction = async (functionId: string, isActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('persona_functions')
+        .update({ is_active: isActive })
+        .eq('id', functionId);
+
+      if (error) throw error;
+      await fetchFunctions();
+    } catch (error) {
+      console.error('Error toggling function:', error);
+    }
+  };
 
   const checkIfFavorited = async () => {
     if (!user?.id || !id) return;
@@ -353,6 +449,14 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
               >
                 Integrations
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Code size={16} />}
+                onClick={() => setActivePanel(activePanel === 'functions' ? null : 'functions')}
+              >
+                Functions
+              </Button>
               {persona.visibility === 'public' && (
                 <Button
                   variant="outline"
@@ -450,6 +554,20 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
           </div>
         )}
 
+        {/* Functions sidebar */}
+        {activePanel === 'functions' && (
+          <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom h-[80vh] md:h-auto">
+            <FunctionsPanel
+              functions={functions}
+              onAddFunction={() => setIsAddingFunction(true)}
+              onEditFunction={setEditingFunction}
+              onDeleteFunction={handleDeleteFunction}
+              onToggleFunction={handleToggleFunction}
+              onClose={() => setActivePanel(null)}
+            />
+          </div>
+        )}
+
         {/* Integration Modal */}
         <IntegrationModal
           isOpen={isAddingIntegration || editingIntegration !== null}
@@ -465,6 +583,23 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
             }
           }}
           integration={editingIntegration || undefined}
+        />
+
+        {/* Function Modal */}
+        <FunctionModal
+          isOpen={isAddingFunction || editingFunction !== null}
+          personaId={persona.id}
+          onClose={() => {
+            setIsAddingFunction(false);
+            setEditingFunction(null);
+          }}
+          onSubmit={(data) => {
+            if (editingFunction) {
+              handleUpdateFunction(editingFunction.id, data);
+            } else {
+              handleCreateFunction(data);
+            }
+          }}
         />
 
         {/* Embed Modal */}

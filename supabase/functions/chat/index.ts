@@ -17,6 +17,12 @@ interface Integration {
   parameters: Record<string, string>;
 }
 
+interface CustomFunction {
+  name: string;
+  description?: string;
+  code: string;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -28,6 +34,7 @@ interface RequestBody {
   personality: string[];
   knowledge: string[];
   tone: string;
+  functions?: CustomFunction[];
   userId: string;
   tokensNeeded: number;
   integrations?: Integration[];
@@ -496,7 +503,7 @@ Deno.serve(async (req) => {
       throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
     }
 
-    const { messages, personaId, personality, knowledge, tone, userId, tokensNeeded, integrations = [] } = requestData;
+    const { messages, personaId, personality, knowledge, tone, userId, tokensNeeded, integrations = [], functions = [] } = requestData;
 
     // Check if the latest message contains an image generation request
     const latestMessage = messages[messages.length - 1];
@@ -584,7 +591,10 @@ Deno.serve(async (req) => {
     let systemPrompt = `You are an AI assistant with the following characteristics:
 - Personality traits: ${personality.join(', ')}
 - Knowledge areas: ${knowledge.join(', ')}
-- Communication style: ${tone}`;
+- Communication style: ${tone}
+
+You have access to the following custom functions:
+${functions?.map(f => `- ${f.name}: ${f.description || 'No description'}`).join('\n') || 'No custom functions available'}`;
 
     if (integrations.length > 0) {
       systemPrompt += `\n\nYou have access to the following integrations:\n${integrations
@@ -676,12 +686,76 @@ Deno.serve(async (req) => {
       }))];
     }
 
+    // Add custom functions if present
+    if (functions?.length > 0) {
+      requestOptions.functions = [...(requestOptions.functions || []), ...functions.map(f => ({
+        name: f.name,
+        description: f.description || '',
+        parameters: {
+          type: 'object',
+          properties: {
+            input: {
+              type: 'object',
+              description: 'Input parameters for the function'
+            }
+          }
+        }
+      }))];
+    }
+
     // Get completion from OpenAI
     const completion = await openai.chat.completions.create(requestOptions);
 
     // Handle function calls
     const message = completion.choices[0].message;
     if (message.function_call) {
+      // Handle custom functions
+      const customFunction = functions?.find(f => f.name === message.function_call.name);
+      if (customFunction) {
+        try {
+          const args = JSON.parse(message.function_call.arguments);
+          
+          // Prepare execution context
+          const { data: contextData, error: contextError } = await supabase
+            .rpc('prepare_execution_context', {
+              function_id: customFunction.id,
+              input_params: args.input || {}
+            });
+
+          if (contextError) throw contextError;
+          if (!contextData.success) throw new Error(contextData.error);
+          
+          // Execute the function
+          const { data: result, error: execError } = await supabase
+            .rpc('execute_custom_function', {
+              function_code: contextData.context.function.code,
+              input_params: contextData.context.input
+            });
+
+          if (execError) throw execError;
+          
+          return new Response(
+            JSON.stringify({ 
+              message: result.success 
+                ? `Function executed successfully: ${JSON.stringify(result.result)}`
+                : `Function execution failed: ${result.error}`
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error) {
+          console.error('Function execution error:', error);
+          return new Response(
+            JSON.stringify({
+              error: `Failed to execute function: ${error.message}`
+            }),
+            { 
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+          );
+        }
+      }
+      
       if (message.function_call.name === "generateImage") {
         // Parse the function arguments
         const { prompt, style = "natural" } = JSON.parse(message.function_call.arguments);

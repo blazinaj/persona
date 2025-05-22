@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { X, Upload, Check, Plus, Tag, Brain, MessageSquare, Code } from 'lucide-react';
+import PersonaAIForm from './PersonaAIForm';
 import Button from './ui/Button';
 import { PersonalityTrait, PersonaTemplate, CommunicationTone, KnowledgeArea } from '../types';
 import { personaTemplates } from '../data/personaTemplates';
@@ -146,6 +147,19 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
               <X size={20} className="text-gray-500" />
             </button>
           </div>
+
+          {/* AI Form */}
+          <PersonaAIForm 
+            onSuggest={(suggestions) => {
+              if (suggestions.name) setValue('name', suggestions.name);
+              if (suggestions.description) setValue('description', suggestions.description);
+              if (suggestions.tags) setValue('tags', suggestions.tags);
+              if (suggestions.personality) setValue('personality', suggestions.personality);
+              if (suggestions.knowledge) setValue('knowledge', suggestions.knowledge);
+              if (suggestions.tone) setValue('tone', suggestions.tone);
+              if (suggestions.examples) setValue('examples', suggestions.examples);
+            }}
+          />
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {/* Template Selection */}
