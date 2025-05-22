@@ -3,7 +3,10 @@ import { Routes, Route, useNavigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
 import Explore from './pages/Explore';
+import Community from './pages/Community';
+import Resources from './pages/Resources';
 import Profile from './pages/Profile';
+import ExplorerPersonaDetails from './pages/ExplorerPersonaDetails';
 import Billing from './pages/Billing';
 import CreatePersonaModal from './components/CreatePersonaModal';
 import EditPersonaModal from './components/EditPersonaModal';
@@ -12,7 +15,6 @@ import PersonaDetails from './components/PersonaDetails';
 import { AuthModal } from './components/AuthModal';
 import { Persona } from './types';
 import { supabase } from './lib/supabase';
-import { ChatbotFAB } from './components/ChatbotFAB';
 import { AuthContext } from './lib/AuthContext';
 
 function App() {
@@ -27,32 +29,41 @@ function App() {
   useEffect(() => {
     // Check initial auth state
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchPersonas();
-      }
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      // Only fetch if we have a user with an ID
+      if (currentUser?.id) fetchPersonas(currentUser.id);
     });
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchPersonas();
-      } else {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser?.id) {
+        fetchPersonas(currentUser.id); // Fetch personas when user ID is available
+      } else { 
         setPersonas([]);
+        setLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchPersonas = async () => {
+  const fetchPersonas = async (userId: string) => {
+    if (!userId) {
+      console.error('Cannot fetch personas: No user ID provided');
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('personas')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -79,6 +90,11 @@ function App() {
   };
   
   const handleCreateSubmit = async (data: any) => {
+    if (!user?.id) {
+      console.error('Cannot create persona: No user ID available');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('personas')
@@ -92,12 +108,12 @@ function App() {
           tone: data.tone,
           examples: data.examples || [],
           visibility: data.visibility,
-          user_id: user.id // Add the user_id to match RLS policy
+          user_id: user.id
         }]);
 
       if (error) throw error;
 
-      await fetchPersonas();
+      await fetchPersonas(user.id);
       setIsCreateModalOpen(false);
     } catch (error) {
       console.error('Error creating persona:', error);
@@ -112,6 +128,11 @@ function App() {
   };
   
   const handleEditSubmit = async (id: string, data: any) => {
+    if (!user?.id) {
+      console.error('Cannot edit persona: No user ID available');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('personas')
@@ -130,7 +151,7 @@ function App() {
 
       if (error) throw error;
 
-      await fetchPersonas();
+      await fetchPersonas(user.id);
       setEditingPersona(null);
     } catch (error) {
       console.error('Error updating persona:', error);
@@ -138,6 +159,11 @@ function App() {
   };
   
   const handleDuplicatePersona = async (id: string) => {
+    if (!user?.id) {
+      console.error('Cannot duplicate persona: No user ID available');
+      return;
+    }
+
     try {
       const personaToDuplicate = personas.find(p => p.id === id);
       if (!personaToDuplicate) return;
@@ -154,18 +180,23 @@ function App() {
           tone: personaToDuplicate.tone,
           examples: personaToDuplicate.examples,
           is_public: personaToDuplicate.isPublic,
-          user_id: user.id // Add the user_id to match RLS policy
+          user_id: user.id
         }]);
 
       if (error) throw error;
 
-      await fetchPersonas();
+      await fetchPersonas(user.id);
     } catch (error) {
       console.error('Error duplicating persona:', error);
     }
   };
   
   const handleDeletePersona = async (id: string) => {
+    if (!user?.id) {
+      console.error('Cannot delete persona: No user ID available');
+      return;
+    }
+
     const confirmDelete = window.confirm(
       "Are you sure you want to delete this persona? This action cannot be undone."
     );
@@ -179,7 +210,7 @@ function App() {
 
         if (error) throw error;
 
-        await fetchPersonas();
+        await fetchPersonas(user.id);
         navigate('/');
       } catch (error) {
         console.error('Error deleting persona:', error);
@@ -222,6 +253,9 @@ function App() {
                   />
                 } />
                 <Route path="/explore" element={<Explore />} />
+                <Route path="/explore/personas/:id" element={<ExplorerPersonaDetails personas={personas} onBack={() => navigate('/explore')} />} />
+                <Route path="/community" element={<Community />} />
+                <Route path="/resources" element={<Resources />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/settings/billing" element={<Billing />} />
                 <Route path="/personas/:id" element={
@@ -254,7 +288,6 @@ function App() {
           isOpen={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
         />
-        <ChatbotFAB />
       </div>
     </AuthContext.Provider>
   );

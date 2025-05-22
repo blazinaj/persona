@@ -9,6 +9,7 @@ This application is a prototype generated using artificial intelligence. It demo
 ## Features
 
 - **Create Custom AI Personas**: Design AI agents with unique personalities, knowledge areas, and communication styles
+- **Custom Functions**: Add JavaScript functions to extend persona capabilities
 - **Persona Management**: Edit, duplicate, and delete personas
 - **Rich Persona Details**: Define traits, knowledge areas, example interactions, and more
 - **Embeddable Chat Widget**: Easily embed your public personas into any website
@@ -18,6 +19,7 @@ This application is a prototype generated using artificial intelligence. It demo
 - **Message Actions**: Copy messages and download generated images
 - **Responsive Design**: Fully responsive interface that works on all devices
 - **Modern UI**: Beautiful, intuitive interface built with Tailwind CSS
+- **Code Editor**: Built-in Monaco editor for writing custom functions
 - **Type Safety**: Built with TypeScript for enhanced reliability
 - **Subscription Plans**: Flexible usage-based pricing with free trial option
 
@@ -54,6 +56,7 @@ src/
 - **CreatePersonaModal**: Modal for creating new personas
 - **Navbar**: Navigation and user interface
 - **UI Components**: Reusable components like Button, Card, Badge, and Avatar
+- **Function Editor**: Monaco-based code editor with syntax highlighting
 
 ## Features in Detail
 
@@ -73,6 +76,13 @@ src/
 - Message copying and image downloads
 - Conversation history and management
 - Fullscreen chat mode
+
+### Custom Functions
+- Write custom JavaScript functions
+- Built-in code editor with syntax highlighting
+- Function validation and security checks
+- Enable/disable functions as needed
+- AI-assisted function generation
 
 ### Persona Management
 - View detailed information
@@ -116,6 +126,7 @@ src/
 - Custom widget themes
 - Persona sharing and marketplace
 - Advanced customization options
+- Enhanced function capabilities
 - Integration with various AI models
 - Analytics and usage tracking
 - Collaborative features

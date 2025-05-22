@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Search, Filter, Plus, X, Grid, List, SortAsc, Clock } from 'lucide-react';
+import { Search, Filter, Plus, X, Grid, List, SortAsc, Clock, ChevronRight } from 'lucide-react';
 import { Persona } from '../types';
 import PersonaCard from './PersonaCard';
 import Button from './ui/Button';
@@ -30,6 +30,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [isCompactView, setIsCompactView] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('modified');
   const [showFilters, setShowFilters] = useState(false);
   const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
@@ -136,16 +137,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8 pb-24 md:pb-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div className="flex-1">
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900">My Personas</h1>
+          <h1 className="text-2xl font-bold text-gray-900">My Personas</h1>
           <p className="text-gray-600 mt-1">
             Manage and customize your AI personas
           </p>
         </div>
         
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 p-1 bg-gray-100 rounded-lg">
+          <div className="flex items-center gap-2 p-1.5 bg-gray-100 rounded-lg">
             <button
               onClick={() => setViewMode('grid')}
               className={`p-2 rounded ${
@@ -154,7 +155,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              <Grid size={18} />
+              <Grid size={16} />
             </button>
             <button
               onClick={() => setViewMode('list')}
@@ -164,14 +165,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              <List size={18} />
+              <List size={16} />
             </button>
+            {viewMode === 'list' && (
+              <button
+                onClick={() => setIsCompactView(!isCompactView)}
+                className={`p-2 rounded ${
+                  isCompactView
+                    ? 'bg-white shadow-sm text-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title={isCompactView ? 'Show details' : 'Compact view'}
+              >
+                <ChevronRight size={16} className={`transform transition-transform ${isCompactView ? 'rotate-90' : ''}`} />
+              </button>
+            )}
           </div>
           
           <Button 
             variant="primary" 
             leftIcon={<Plus size={16} />}
-            className="w-full md:w-auto"
+            className="hidden md:inline-flex"
             onClick={onCreatePersona}
           >
             Create New Persona
@@ -179,8 +193,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      <div className="mb-8">
-        <div className="flex flex-col sm:flex-row items-center gap-4">
+      <div className="mb-8 space-y-4">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
           <div className="relative flex-grow">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search size={18} className="text-gray-400" />
@@ -188,7 +202,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <input
               type="text"
               placeholder="Search personas..."
-              className="block w-full pl-10 pr-3 py-3 md:py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -202,12 +216,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
             )}
           </div>
           
-          <div className="flex items-center gap-2">
-            <div className="w-px h-6 bg-gray-300 hidden sm:block" />
+          <div className="flex items-center gap-2 md:gap-3">
+            <Button
+              variant="primary"
+              leftIcon={<Plus size={16} />}
+              className="md:hidden flex-1"
+              onClick={onCreatePersona}
+            >
+              Create
+            </Button>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="rounded-lg border border-gray-300 py-3 md:py-2 pl-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="rounded-lg border border-gray-300 py-2.5 pl-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="modified">Last Modified</option>
               <option value="created">Date Created</option>
@@ -217,9 +238,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
               variant="outline"
               leftIcon={<Filter size={16} />}
               onClick={() => setShowFilters(!showFilters)}
-              className="hidden sm:inline-flex"
+              className="flex-1 md:flex-none"
             >
-              Filter
+              <span className="md:hidden">Filters</span>
+              <span className="hidden md:inline">Filter</span>
               {activeFilters.length > 0 && (
                 <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-xs bg-blue-100 text-blue-700 rounded-full">
                   {activeFilters.length}
@@ -306,7 +328,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       ) : (
         <div className={
           viewMode === 'grid'
-            ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6'
+            ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6'
             : 'space-y-4'
         }>
           {filteredPersonas.map((persona) => (
@@ -314,6 +336,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               key={persona.id}
               persona={persona}
               viewMode={viewMode}
+              isCompact={isCompactView}
               viewCount={viewCounts[persona.id] || 0}
               isFavorited={favorites.includes(persona.id)}
               onToggleFavorite={handleToggleFavorite}

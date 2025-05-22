@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Search, Filter, Grid, List, Star, Sparkles, TrendingUp, Clock, Users, Eye, Code, Palette, Briefcase, Heart, Text } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { AuthContext } from '../lib/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import PersonaCard from '../components/PersonaCard';
 import Button from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -13,6 +14,7 @@ type CategoryFilter = 'all' | 'technical' | 'creative' | 'business' | 'lifestyle
 
 export const Explore = () => {
   const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -338,7 +340,7 @@ export const Explore = () => {
               key={persona.id}
               persona={persona}
               viewMode={viewMode}
-              onView={(id) => window.location.href = `/personas/${id}`}
+              onView={(id) => navigate(`/explore/personas/${id}`)}
             />
           ))}
         </div>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { MoreHorizontal, Edit, Copy, Trash, ExternalLink, MessageSquare, Star, StarOff, Users, Eye, EyeOff, Globe } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Persona } from '../types';
 import { DEFAULT_PERSONA_AVATAR } from '../utils/constants';
 import { Card, CardContent, CardFooter } from './ui/Card';
@@ -10,6 +11,7 @@ import { formatRelativeTime } from '../utils/formatters';
 interface PersonaCardProps {
   persona: Persona;
   viewMode?: 'grid' | 'list';
+  isCompact?: boolean;
   onEdit?: (id: string) => void;
   onDuplicate?: (id: string) => void;
   onDelete?: (id: string) => void;
@@ -22,6 +24,7 @@ interface PersonaCardProps {
 export const PersonaCard: React.FC<PersonaCardProps> = ({
   persona,
   viewMode = 'grid',
+  isCompact = false,
   onEdit,
   onDuplicate,
   onDelete,
@@ -31,6 +34,7 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
   onToggleFavorite,
 }) => {
   const [showMenu, setShowMenu] = React.useState(false);
+  const navigate = useNavigate();
 
   const handleMenuToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -80,48 +84,49 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
   if (viewMode === 'list') {
     return (
       <div
-        className="group bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all cursor-pointer overflow-hidden active:scale-[0.99]"
-        onClick={() => onView && onView(persona.id)}
+        className={`group bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all cursor-pointer overflow-hidden active:scale-[0.99] select-none ${
+          isCompact ? 'py-2 px-3' : 'p-4'
+        }`}
+        onClick={() => navigate(`/explore/personas/${persona.id}`)}
       >
-        <div className="p-4 md:p-5">
-          <div className="flex items-start gap-4">
+        <div className="flex items-center gap-3">
+          {!isCompact && (
             <Avatar
               src={persona.avatar || DEFAULT_PERSONA_AVATAR}
               name={persona.name}
-              size="md"
+              size="sm"
               className="ring-2 ring-offset-2 ring-gray-100"
             />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="text-base md:text-lg font-semibold text-gray-900 truncate">{persona.name}</h3>
-                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-xs font-medium">
-                  {getVisibilityIcon()}
-                  <span className="ml-1">{getVisibilityLabel()}</span>
-                </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-medium text-gray-900 truncate">
+                {persona.name}
+              </h3>
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-xs font-medium">
+                {getVisibilityIcon()}
+                <span className="ml-1">{getVisibilityLabel()}</span>
               </div>
-              <p className="text-sm text-gray-600 line-clamp-2">{persona.description}</p>
-              
-              <div className="mt-3 flex items-center gap-4 text-sm text-gray-500">
+            </div>
+            {!isCompact && (
+              <p className="mt-1 text-sm text-gray-600 line-clamp-2">
+                {persona.description}
+              </p>
+            )}
+            {!isCompact && (
+              <div className="mt-2 flex items-center gap-4 text-sm text-gray-500">
                 <div className="flex items-center gap-1">
                   <MessageSquare size={14} />
                   <span>{viewCount} views</span>
                 </div>
-                <button
-                  onClick={handleFavoriteClick}
-                  className={`flex items-center gap-1 transition-colors ${
-                    isFavorited ? 'text-amber-500 hover:text-amber-600' : 'hover:text-gray-700'
-                  }`}
-                >
-                  {isFavorited ? <Star size={14} /> : <StarOff size={14} />}
-                  <span>{isFavorited ? 'Favorited' : 'Add to favorites'}</span>
-                </button>
                 <div className="flex items-center gap-1">
                   <Users size={14} />
                   <span>0 uses</span>
                 </div>
               </div>
-              
-              <div className="flex flex-wrap gap-1.5 mt-3">
+            )}
+            {!isCompact && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
                 {persona.tags?.slice(0, 3).map((tag) => (
                   <Badge key={tag} variant="secondary" className="capitalize text-xs">
                     {tag}
@@ -131,18 +136,26 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
                   <span className="text-xs text-gray-500">+{(persona.tags?.length || 0) - 3} more</span>
                 )}
               </div>
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <div className="text-sm text-gray-500">
-                Updated {formatRelativeTime(persona.lastModified)}
-              </div>
-              <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {!isCompact && (
+              <button
+                onClick={handleFavoriteClick}
+                className={`p-2 rounded-full transition-colors ${
+                  isFavorited ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                {isFavorited ? <Star size={16} /> : <StarOff size={16} />}
+              </button>
+            )}
+            <div className="relative">
                 <button
                   onClick={handleMenuToggle}
                   className="p-1 rounded-full hover:bg-gray-100"
                   aria-label="More options"
                 >
-                  <MoreHorizontal size={18} />
+                  <MoreHorizontal size={16} />
                 </button>
                 
                 {showMenu && (
@@ -170,7 +183,6 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
                   </div>
                 )}
               </div>
-            </div>
           </div>
         </div>
       </div>
@@ -179,8 +191,8 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
 
   return (
     <Card 
-      className="h-full transition-transform duration-200 hover:-translate-y-1 cursor-pointer active:scale-[0.99]" 
-      onClick={() => onView && onView(persona.id)}
+      className="h-full transition-transform duration-200 hover:-translate-y-1 cursor-pointer active:scale-[0.99] select-none" 
+      onClick={() => navigate(`/explore/personas/${persona.id}`)}
     >
       <CardContent className="relative p-0 group">
         <div className="relative h-40 md:h-48 bg-gradient-to-br from-blue-500/90 to-purple-600/90 overflow-hidden">

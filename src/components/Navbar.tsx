@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Menu, X, User, LogOut, Settings, ChevronDown, Home, Compass, Users, BookOpen } from 'lucide-react';
+import { Menu, X, User, LogOut, Settings, ChevronDown, Home, Compass, Users, BookOpen, ChevronRight } from 'lucide-react';
 import { AuthContext } from '../lib/AuthContext';
 import { Avatar } from './ui/Avatar';
 import Button from './ui/Button';
@@ -164,66 +164,76 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
             </div>
           </div>
         </div>
-      </div>
-      
-      {/* Mobile menu, show/hide based on menu state */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 md:hidden safe-bottom">
-        <div className="grid grid-cols-4 gap-1 p-2">
-          <NavLink
-            to="/"
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center py-2 px-1 rounded-lg ${
-                isActive
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`
-            }
-            end
-          >
-            <Home size={20} />
-            <span className="text-xs mt-1">Home</span>
-          </NavLink>
-          <NavLink
-            to="/explore"
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center py-2 px-1 rounded-lg ${
-                isActive
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`
-            }
-          >
-            <Compass size={20} />
-            <span className="text-xs mt-1">Explore</span>
-          </NavLink>
-          <NavLink
-            to="/community"
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center py-2 px-1 rounded-lg ${
-                isActive
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`
-            }
-          >
-            <Users size={20} />
-            <span className="text-xs mt-1">Community</span>
-          </NavLink>
-          <NavLink
-            to="/resources"
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center py-2 px-1 rounded-lg ${
-                isActive
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`
-            }
-          >
-            <BookOpen size={20} />
-            <span className="text-xs mt-1">Resources</span>
-          </NavLink>
+        
+        {/* Mobile menu */}
+        {isMenuOpen && (
+        <div className="absolute top-full left-0 right-0 bg-white border-b border-gray-200 shadow-lg md:hidden">
+          <nav className="px-4 py-2">
+            <NavLink
+              to="/"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-lg ${
+                  isActive
+                    ? 'text-blue-600 bg-blue-50'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`
+              }
+              end
+              onClick={() => setIsMenuOpen(false)}
+            >
+              <Home size={20} />
+              <span>Dashboard</span>
+              <ChevronRight size={16} className="ml-auto" />
+            </NavLink>
+            <NavLink
+              to="/explore"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-lg ${
+                  isActive
+                    ? 'text-blue-600 bg-blue-50'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`
+              }
+              onClick={() => setIsMenuOpen(false)}
+            >
+              <Compass size={20} />
+              <span>Explore</span>
+              <ChevronRight size={16} className="ml-auto" />
+            </NavLink>
+            <NavLink
+              to="/community"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-lg ${
+                  isActive
+                    ? 'text-blue-600 bg-blue-50'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`
+              }
+              onClick={() => setIsMenuOpen(false)}
+            >
+              <Users size={20} />
+              <span>Community</span>
+              <ChevronRight size={16} className="ml-auto" />
+            </NavLink>
+            <NavLink
+              to="/resources"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-lg ${
+                  isActive
+                    ? 'text-blue-600 bg-blue-50'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`
+              }
+              onClick={() => setIsMenuOpen(false)}
+            >
+              <BookOpen size={20} />
+              <span>Resources</span>
+              <ChevronRight size={16} className="ml-auto" />
+            </NavLink>
+          </nav>
         </div>
-      </nav>
+        )}
+      </div>
     </header>
   );
 };
