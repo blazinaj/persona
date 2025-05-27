@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Plus, X, Grid, List, SortAsc, Clock, ChevronRight } from 'lucide-react';
 import { Persona } from '../types';
 import PersonaCard from './PersonaCard';
 import Button from './ui/Button';
 import { supabase } from '../lib/supabase';
 import { AuthContext } from '../lib/AuthContext';
+
+const VIEW_MODE_KEY = 'persona_view_mode';
 
 type ViewMode = 'grid' | 'list';
 type SortOption = 'name' | 'created' | 'modified';
@@ -26,15 +29,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onDeletePersona,
   onViewPersona,
 }) => {
+  const navigate = useNavigate();
   const { user } = useContext(AuthContext);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const savedMode = localStorage.getItem(VIEW_MODE_KEY);
+    return (savedMode === 'list' || savedMode === 'grid') ? savedMode : 'grid';
+  });
   const [isCompactView, setIsCompactView] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('modified');
   const [showFilters, setShowFilters] = useState(false);
   const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
   const [favorites, setFavorites] = useState<string[]>([]);
+
+  // Save view mode preference when it changes
+  useEffect(() => {
+    localStorage.setItem(VIEW_MODE_KEY, viewMode);
+  }, [viewMode]);
 
   useEffect(() => {
     fetchViewsAndFavorites();
@@ -343,7 +355,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
               onEdit={onEditPersona}
               onDuplicate={onDuplicatePersona}
               onDelete={onDeletePersona}
-              onView={onViewPersona}
+              onView={(id) => navigate(`/personas/${id}`)}
+              navigate={navigate}
             />
           ))}
         </div>

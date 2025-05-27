@@ -1,11 +1,24 @@
 import { supabase } from './supabase';
 import {AuthContext} from './AuthContext';
 
+// Helper to determine if we're in production (using a variable instead of a function)
+const isProduction = window.location.hostname === 'personify.mobi' || 
+                     window.location.hostname === 'www.personify.mobi';
+
 export async function signInWithGoogle() {
+  // Set the correct redirect URL based on environment
+  const redirectTo = isProduction
+    ? 'https://www.personify.mobi/auth/callback'
+    : `${window.location.origin}/auth/callback`;
+
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${window.location.origin}/auth/callback`
+      redirectTo,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent'
+      }
     }
   });
   return { data, error };

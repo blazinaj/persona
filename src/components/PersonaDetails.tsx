@@ -1,19 +1,18 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Copy, Trash, Info, Wrench, MoreHorizontal, List, Code } from 'lucide-react';
-import { Persona, Integration } from '../types';
-import { DEFAULT_PERSONA_AVATAR } from '../utils/constants';
+import { ArrowLeft, Star, StarOff, Eye, MessageSquare, Code, Info, Share2, Copy, Check, List, Edit, Trash, MoreHorizontal } from 'lucide-react';
+import { Persona } from '../types';
+import { getAvatarUrl } from '../utils/avatarHelpers';
 import { supabase } from '../lib/supabase';
 import { AuthContext } from '../lib/AuthContext';
 import { Chat } from './Chat';
 import { DetailsPanel } from './DetailsPanel';
-import { IntegrationModal } from './IntegrationModal';
 import { FunctionModal } from './FunctionModal';
-import { IntegrationsPanel } from './IntegrationsPanel';
 import { FunctionsPanel } from './FunctionsPanel';
 import { ConversationsPanel } from './ConversationsPanel';
 import { EmbedModal } from './EmbedModal';
 import Button from './ui/Button';
+import Avatar from './ui/Avatar';
 
 interface PersonaDetailsProps {
   personas: Persona[];
@@ -38,13 +37,11 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
   const [functions, setFunctions] = useState<any[]>([]);
   const [isAddingFunction, setIsAddingFunction] = useState(false);
   const [editingFunction, setEditingFunction] = useState<any>(null);
-  const [integrations, setIntegrations] = useState<Integration[]>([]);
-  const [isAddingIntegration, setIsAddingIntegration] = useState(false);
-  const [editingIntegration, setEditingIntegration] = useState<Integration | null>(null);
   const [conversations, setConversations] = useState<any[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string>();
   const [showMenu, setShowMenu] = useState(false);
   const [showEmbedModal, setShowEmbedModal] = useState(false);
+  const [showShareTooltip, setShowShareTooltip] = useState(false);
 
   const persona = personas.find(p => p.id === id);
   const navigate = useNavigate();
@@ -140,7 +137,6 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
 
   useEffect(() => {
     if (id) {
-      fetchIntegrations();
       fetchFunctions();
     }
   }, [id]);
@@ -282,6 +278,25 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
     }
   };
 
+  const handleShare = async () => {
+    const shareUrl = `${window.location.origin}/explore/personas/${persona.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Chat with ${persona.name}`,
+          text: persona.description || `Check out this AI persona: ${persona.name}`,
+          url: shareUrl
+        });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        setShowShareTooltip(true);
+        setTimeout(() => setShowShareTooltip(false), 2000);
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
   const trackView = async () => {
     if (!user?.id || !id) return;
 
@@ -317,89 +332,8 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
     }
   };
 
-  const fetchIntegrations = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('integrations')
-        .select('*')
-        .eq('persona_id', id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setIntegrations(data || []);
-    } catch (error) {
-      console.error('Error fetching integrations:', error);
-    }
-  };
-
-  const handleCreateIntegration = async (data: any) => {
-    try {
-      const { error } = await supabase
-        .from('integrations')
-        .insert({
-          persona_id: id,
-          name: data.name,
-          description: data.description,
-          endpoint: data.endpoint,
-          method: data.method,
-          headers: data.headers,
-          parameters: data.parameters,
-          user_id: user?.id
-        });
-
-      if (error) throw error;
-      await fetchIntegrations();
-      setIsAddingIntegration(false);
-    } catch (error) {
-      console.error('Error creating integration:', error);
-    }
-  };
-
-  const handleUpdateIntegration = async (integrationId: string, data: any) => {
-    try {
-      const { error } = await supabase
-        .from('integrations')
-        .update({
-          name: data.name,
-          description: data.description,
-          endpoint: data.endpoint,
-          method: data.method,
-          headers: data.headers,
-          parameters: data.parameters,
-          is_active: data.is_active
-        })
-        .eq('id', integrationId);
-
-      if (error) throw error;
-      await fetchIntegrations();
-      setEditingIntegration(null);
-    } catch (error) {
-      console.error('Error updating integration:', error);
-    }
-  };
-
-  const handleDeleteIntegration = async (integrationId: string) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this integration? This action cannot be undone."
-    );
-    
-    if (confirmDelete) {
-      try {
-        const { error } = await supabase
-          .from('integrations')
-          .delete()
-          .eq('id', integrationId);
-
-        if (error) throw error;
-        await fetchIntegrations();
-      } catch (error) {
-        console.error('Error deleting integration:', error);
-      }
-    }
-  };
-
   if (!persona) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/\" replace />;
   }
 
   return (
@@ -415,10 +349,10 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
               <ArrowLeft size={20} className="text-gray-600" />
             </button>
             <div className="flex items-center gap-2">
-              <img
-                src={persona.avatar || DEFAULT_PERSONA_AVATAR}
-                alt={persona.name}
-                className="w-8 h-8 rounded-full object-cover"
+              <Avatar
+                src={persona.avatar}
+                name={persona.name}
+                size="sm"
               />
               <h1 className="text-lg md:text-xl font-semibold text-gray-900 truncate">{persona.name}</h1>
             </div>
@@ -444,14 +378,6 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                leftIcon={<Wrench size={16} />}
-                onClick={() => setActivePanel(activePanel === 'integrations' ? null : 'integrations')}
-              >
-                Integrations
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
                 leftIcon={<Code size={16} />}
                 onClick={() => setActivePanel(activePanel === 'functions' ? null : 'functions')}
               >
@@ -466,6 +392,23 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
                 >
                   Embed
                 </Button>
+              )}
+              {(persona.visibility === 'public' || persona.visibility === 'unlisted') && (
+                <div className="relative">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    leftIcon={showShareTooltip ? <Check size={16} /> : <Share2 size={16} />}
+                    onClick={handleShare}
+                  >
+                    {showShareTooltip ? 'Copied!' : 'Share'}
+                  </Button>
+                  {showShareTooltip && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded">
+                      Link copied!
+                    </div>
+                  )}
+                </div>
               )}
               <Button variant="outline" size="sm" leftIcon={<Edit size={16} />} onClick={() => onEdit(persona.id)}>Edit</Button>
               <Button variant="outline" size="sm" leftIcon={<Copy size={16} />} onClick={() => onDuplicate(persona.id)}>Duplicate</Button>
@@ -487,9 +430,6 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
               </button>
               <button onClick={() => { setShowMenu(false); setActivePanel('conversations'); }} className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                 <List size={16} className="mr-2" /> Conversations
-              </button>
-              <button onClick={() => { setShowMenu(false); setActivePanel('integrations'); }} className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                <Wrench size={16} className="mr-2" /> Integrations
               </button>
               {persona.visibility === 'public' && (
                 <button onClick={() => { setShowMenu(false); setShowEmbedModal(true); }} className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
@@ -513,7 +453,7 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
       {/* Main content */}
       <div className="flex-1 flex flex-col md:flex-row gap-6 p-4 pb-24 md:pb-4">
         {/* Chat section */}
-        <div className="flex-1">
+        <div className="flex-1 h-[calc(100vh-4rem)]">
           <Chat persona={persona} selectedConversationId={selectedConversationId} />
         </div>
 
@@ -541,19 +481,6 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
           </div>
         )}
 
-        {/* Integrations sidebar */}
-        {activePanel === 'integrations' && (
-          <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom h-[80vh] md:h-auto">
-            <IntegrationsPanel
-              integrations={integrations}
-              onAddIntegration={() => setIsAddingIntegration(true)}
-              onEditIntegration={setEditingIntegration}
-              onDeleteIntegration={handleDeleteIntegration}
-              onClose={() => setActivePanel(null)}
-            />
-          </div>
-        )}
-
         {/* Functions sidebar */}
         {activePanel === 'functions' && (
           <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom h-[80vh] md:h-auto">
@@ -567,23 +494,6 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
             />
           </div>
         )}
-
-        {/* Integration Modal */}
-        <IntegrationModal
-          isOpen={isAddingIntegration || editingIntegration !== null}
-          onClose={() => {
-            setIsAddingIntegration(false);
-            setEditingIntegration(null);
-          }}
-          onSubmit={(data) => {
-            if (editingIntegration) {
-              handleUpdateIntegration(editingIntegration.id, data);
-            } else {
-              handleCreateIntegration(data);
-            }
-          }}
-          integration={editingIntegration || undefined}
-        />
 
         {/* Function Modal */}
         <FunctionModal

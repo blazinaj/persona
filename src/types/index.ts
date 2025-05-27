@@ -11,6 +11,13 @@ export type Persona = {
   tone?: string;
   examples?: string[];
   visibility: 'private' | 'unlisted' | 'public';
+  voice?: {
+    gender?: 'male' | 'female' | 'neutral';
+    age?: 'young' | 'middle-aged' | 'elderly';
+    accent?: string;
+    pitch?: number;
+    rate?: number;
+  };
 };
 
 export type Conversation = {

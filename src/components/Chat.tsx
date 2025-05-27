@@ -3,7 +3,6 @@ import {
   Send,
   Loader2,
   MessageSquare,
-  List,
   AlertCircle,
   Sparkles,
   Image,
@@ -14,14 +13,21 @@ import {
   Copy,
   Download,
   Check,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { Persona } from '../types';
-import { DEFAULT_PERSONA_AVATAR } from '../utils/constants';
+import { getAvatarUrl } from '../utils/avatarHelpers';
 import { Markdown } from './ui/Markdown';
 import { Avatar } from './ui/Avatar';
 import Button from './ui/Button';
 import { supabase } from '../lib/supabase';
 import { ConversationsPanel } from './ConversationsPanel';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import useSpeechRecognition from '../hooks/useSpeechRecognition';
+import { getVoiceForPersona, getSpeechSpeed } from '../lib/speechSynthesis';
 
 interface ChatProps {
   persona: Persona;
@@ -32,23 +38,13 @@ interface ChatProps {
   onConversationSelect?: (id: string) => void;
 }
 
-interface Integration {
-  name: string;
-  description?: string;
-  endpoint: string;
-  method: string;
-  headers: Record<string, string>;
-  parameters: Record<string, string>;
-}
+const MAX_CONTEXT_MESSAGES = 10;
+const MAX_MESSAGE_LENGTH = 2000;
+const TOKEN_WARNING_THRESHOLD = 5000;
 
-const MAX_CONTEXT_MESSAGES = 10; // Maximum number of previous messages to include
-const MAX_MESSAGE_LENGTH = 2000; // Maximum length of a single message
-const TOKEN_WARNING_THRESHOLD = 5000; // Show warning when approaching token limit
-
-// Rough token estimation (4 chars per token on average)
 const estimateTokens = (text: string): number => {
   const words = text.trim().split(/\s+/);
-  return Math.ceil(words.length * 1.3); // Average of 1.3 tokens per word
+  return Math.ceil(words.length * 1.3);
 };
 
 export const Chat: React.FC<ChatProps> = ({
@@ -67,7 +63,6 @@ export const Chat: React.FC<ChatProps> = ({
   const [showConversations, setShowConversations] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isPublicView, setIsPublicView] = useState(false);
-  const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [functions, setFunctions] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [tokenWarning, setTokenWarning] = useState<string | null>(null);
@@ -76,19 +71,299 @@ export const Chat: React.FC<ChatProps> = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [imageGenerationProgress, setImageGenerationProgress] =
-    useState<string>('');
+  const [imageGenerationProgress, setImageGenerationProgress] = useState<string>('');
   const [isExpanded, setIsExpanded] = useState(false);
-  const [currentConversationId, setCurrentConversationId] = useState<
-    string | undefined
-  >(selectedConversationId);
+  const [currentConversationId, setCurrentConversationId] = useState<string | undefined>(selectedConversationId);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
-  const [editingConversation, setEditingConversation] = useState<string | null>(
-    null
-  );
+  const [editingConversation, setEditingConversation] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const isMobile = useMediaQuery('(max-width: 640px)');
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const currentAudioUrlRef = useRef<string | null>(null);
+
+  const {
+    transcript,
+    resetTranscript,
+    startListening,
+    stopListening,
+    browserSupportsSpeechRecognition,
+    isSpeechSupported,
+    error: speechError
+  } = useSpeechRecognition({
+    continuous: true,
+    language: 'en-US'
+  });
+
+  useEffect(() => {
+    console.log('Speech recognition supported in browser:', browserSupportsSpeechRecognition);
+    console.log('Speech recognition supported in hook:', isSpeechSupported);
+    console.log('SpeechRecognition in window:', 'SpeechRecognition' in window);
+    console.log('webkitSpeechRecognition in window:', 'webkitSpeechRecognition' in window);
+  }, [browserSupportsSpeechRecognition, isSpeechSupported]);
+
+  useEffect(() => {
+    if (transcript) {
+      setInput(transcript);
+    }
+  }, [transcript]);
+
+  useEffect(() => {
+    if (transcript) {
+      setInput(transcript);
+    }
+  }, [transcript]);
+
+  useEffect(() => {
+    const audio = new Audio();
+    audioRef.current = audio;
+    
+    audio.addEventListener('ended', () => {
+      setIsSpeaking(false);
+    });
+    
+    audio.addEventListener('error', (e) => {
+      if (e?.target?.error?.code === 4) {
+        return
+      }
+      console.error('Audio playback error:', {
+        error: e?.toString(),
+        errorCode: e.target?.error?.code,
+        errorMessage: e.target?.error?.message,
+        currentSrc: audio.currentSrc,
+        readyState: audio.readyState
+      });
+      
+      setIsSpeaking(false);
+      setError('Failed to play audio. Please try again.');
+    });
+
+    audio.addEventListener('canplay', () => {
+      if (audioEnabled && !audio.paused) {
+        audio.play().catch(err => {
+          console.error('Error during audio play:', err);
+          setIsSpeaking(false);
+          setError('Failed to start audio playback.');
+        });
+      }
+    });
+    
+    return () => {
+      try {
+        if (audio) {
+          audio.pause();
+          audio.src = '';
+        }
+        
+        if (currentAudioUrlRef.current) {
+          URL.revokeObjectURL(currentAudioUrlRef.current);
+          currentAudioUrlRef.current = null;
+        }
+      } catch (err) {
+        console.error('Error during audio cleanup:', err);
+      }
+    };
+  }, []);
+
+  // Helper function to play audio for a specific message
+  const playMessageAudio = async (text: string) => {
+    if (audioEnabled && text) {
+      await speakText(text);
+    } else if (!audioEnabled) {
+      // If audio is disabled, enable it first then play
+      setAudioEnabled(true);
+      await speakText(text);
+    }
+  };
+  
+  const speakText = async (text: string) => {
+    if (!audioRef.current || !audioEnabled || !text) {
+      console.log('Skipping audio playback - conditions not met:', {
+        hasAudioRef: Boolean(audioRef.current),
+        hasText: Boolean(text)
+      });
+      return;
+    }
+    
+    try {
+      stopSpeaking();
+      
+      setIsSpeaking(true);
+     setCopiedMessageId(null); // Reset any copied message state
+      setError(null);
+      
+      const voice = getVoiceForPersona(persona);
+      const speed = getSpeechSpeed(persona);
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({
+            text,
+            voice,
+            speed,
+            personaId: persona.id
+          })
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Speech generation failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const audioBlob = await response.blob();
+      
+      if (!audioBlob || audioBlob.size === 0) {
+        throw new Error('Received empty audio data');
+      }
+      
+      if (currentAudioUrlRef.current) {
+        URL.revokeObjectURL(currentAudioUrlRef.current);
+      }
+      
+      const audioUrl = URL.createObjectURL(audioBlob);
+      currentAudioUrlRef.current = audioUrl;
+      
+      if (!audioRef.current) {
+        throw new Error('Audio element not initialized');
+      }
+
+      // Verify the audio URL is valid before setting it
+      if (!audioUrl) {
+        throw new Error('Failed to create audio URL');
+      }
+      
+      // Set the audio source and attempt playback
+      audioRef.current.src = audioUrl;
+      
+      try {
+        // Wait for the audio to be loaded before playing
+        if (audioRef.current) {
+          await audioRef.current.play();
+        }
+      } catch (playError) {
+        console.error('Error playing audio:', playError);
+        setIsSpeaking(false);
+      }
+    } catch (error: any) {
+      console.error('Error generating or playing speech:', error);
+      setIsSpeaking(false);
+      setError(`Audio playback failed: ${error.message}`);
+      
+      if (currentAudioUrlRef.current) {
+        URL.revokeObjectURL(currentAudioUrlRef.current);
+        currentAudioUrlRef.current = null;
+      }
+
+      // Reset audio element state
+      if (audioRef.current) {
+        audioRef.current.src = '';
+      }
+    }
+  };
+  
+  const stopSpeaking = () => {
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.src = ''; // Clear the source
+      }
+     setCopiedMessageId(null); // Reset copied message ID when stopping speech
+    } catch (err) {
+      console.error('Error stopping audio:', err);
+    } finally {
+      setIsSpeaking(false);
+    }
+  };
+  
+  const toggleAudio = () => {
+    try {
+      if (audioEnabled) {
+        stopSpeaking();
+        setAudioEnabled(false);
+      } else {
+        setAudioEnabled(true);
+      }
+    } catch (err) {
+      console.error('Error toggling audio:', err);
+      setError('Failed to toggle audio. Please try again.');
+    }
+  };
+
+  useEffect(() => {
+    if (speechError) {
+      setTranscriptError(speechError);
+      setTimeout(() => setTranscriptError(null), 5000);
+    }
+  }, [speechError]);
+
+  const [firstRender, setFirstRender] = useState(false);
+
+  useEffect(() => {
+    setFirstRender(true);
+  }, []);
+
+  useEffect(() => {
+    
+    if (!firstRender || !audioEnabled || !messages.length) return;
+    
+    try {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage?.role === 'assistant' && !lastMessage.isLoading) {
+        // Extract text content from markdown
+        const textContent = lastMessage.content.replace(/!\[.*?\]\(.*?\)/g, '').trim();
+        if (textContent) {
+          speakText(textContent);
+        }
+      }
+    } catch (err) {
+      console.error('Error playing message audio:', err);
+    }
+  }, [messages, isLoading]);
+
+  const toggleVoiceInput = () => {
+    if (isListening) {
+      stopListening();
+      setIsListening(false);
+    } else {
+      resetTranscript();
+      startListening();
+      setIsListening(true);
+    }
+  };
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (error) throw error;
+        setUserProfile(data);
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    };
+    
+    fetchUserProfile();
+  }, [user?.id]);
 
   const handleCopyMessage = async (content: string, messageId: string) => {
     try {
@@ -102,12 +377,10 @@ export const Chat: React.FC<ChatProps> = ({
 
   const handleDownloadImage = async (imageUrl: string) => {
     try {
-      // Validate URL
       if (!imageUrl || !imageUrl.startsWith('http')) {
         throw new Error('Invalid image URL');
       }
 
-      // First try to fetch with CORS mode
       let response = await fetch(imageUrl, {
         mode: 'cors',
         headers: {
@@ -115,7 +388,6 @@ export const Chat: React.FC<ChatProps> = ({
         },
       });
 
-      // If CORS fails, try no-cors mode as fallback
       if (!response.ok && response.type === 'opaque') {
         response = await fetch(imageUrl, {
           mode: 'no-cors',
@@ -126,11 +398,9 @@ export const Chat: React.FC<ChatProps> = ({
       }
 
       if (!response.ok && response.status !== 0) {
-        // Status 0 is returned for successful no-cors requests
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Check content type if available
       const contentType = response.headers.get('content-type');
       if (contentType && !contentType.startsWith('image/')) {
         throw new Error('Invalid content type: Expected an image');
@@ -141,11 +411,9 @@ export const Chat: React.FC<ChatProps> = ({
       const link = document.createElement('a');
       link.href = url;
 
-      // Get file extension from content type or URL
       const extension = contentType ? contentType.split('/')[1] : 'png';
       link.download = `generated-image-${Date.now()}.${extension}`;
 
-      // Append link, trigger download, and cleanup
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -154,7 +422,6 @@ export const Chat: React.FC<ChatProps> = ({
       console.error('Image download error:', err);
       let errorMessage = 'Failed to download image';
 
-      // Provide more specific error messages
       if (err.message.includes('Invalid image URL')) {
         errorMessage = 'Invalid image URL provided';
       } else if (err.message.includes('HTTP error')) {
@@ -167,12 +434,10 @@ export const Chat: React.FC<ChatProps> = ({
     }
   };
 
-  // Update currentConversationId when selectedConversationId changes
   useEffect(() => {
     setCurrentConversationId(selectedConversationId);
   }, [selectedConversationId]);
 
-  // Handle keyboard shortcuts for fullscreen
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isExpanded) {
@@ -188,7 +453,6 @@ export const Chat: React.FC<ChatProps> = ({
   }, [isExpanded]);
 
   useEffect(() => {
-    // Get the current user
     const getCurrentUser = async () => {
       try {
         const {
@@ -197,7 +461,6 @@ export const Chat: React.FC<ChatProps> = ({
         setUser(user);
 
         if (user) {
-          // Check if user can claim trial
           const { data: canClaim, error } = await supabase.rpc(
             'can_claim_free_trial',
             { user_id_input: user.id }
@@ -239,7 +502,6 @@ export const Chat: React.FC<ChatProps> = ({
 
   useEffect(() => {
     loadConversations();
-    loadIntegrations();
     fetchFunctions();
     setIsPublicView(window.location.pathname.startsWith('/explore/personas/'));
   }, [persona.id]);
@@ -257,21 +519,6 @@ export const Chat: React.FC<ChatProps> = ({
       setFunctions(data || []);
     } catch (error) {
       console.error('Error fetching functions:', error);
-    }
-  };
-
-  const loadIntegrations = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('integrations')
-        .select('*')
-        .eq('persona_id', persona.id)
-        .eq('is_active', true);
-
-      if (error) throw error;
-      setIntegrations(data || []);
-    } catch (error) {
-      console.error('Error loading integrations:', error);
     }
   };
 
@@ -324,7 +571,6 @@ export const Chat: React.FC<ChatProps> = ({
     if (!user) return;
 
     try {
-      // Set initial title based on first message
       const title = input.length > 30 ? `${input.slice(0, 30)}...` : input;
 
       const { data, error } = await supabase
@@ -399,11 +645,9 @@ export const Chat: React.FC<ChatProps> = ({
   };
 
   const getRecentMessages = (allMessages: any[]) => {
-    // Get the most recent messages up to MAX_CONTEXT_MESSAGES
     return allMessages.slice(-MAX_CONTEXT_MESSAGES);
   };
 
-  // Calculate total tokens for the conversation
   const calculateTotalTokens = (
     messages: any[],
     newMessage: string
@@ -443,9 +687,12 @@ export const Chat: React.FC<ChatProps> = ({
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    // If not logged in, redirect to login
+    // Stop any ongoing speech when sending a new message
+    stopSpeaking();
+
     if (!user) {
-      navigate('/login');
+      // Redirect to login page
+      window.location.href = '/login';
       return;
     }
 
@@ -458,13 +705,11 @@ export const Chat: React.FC<ChatProps> = ({
       return;
     }
 
-    // Calculate total tokens including the new message
     const recentMessages = getRecentMessages(messages);
     const totalTokens = estimateTokens(
       recentMessages.map((m) => m.content).join(' ') + ' ' + userContent
     );
 
-    // Show warning if approaching token limit
     if (totalTokens > TOKEN_WARNING_THRESHOLD) {
       setTokenWarning(
         'Approaching message limit. Consider starting a new conversation.'
@@ -477,10 +722,8 @@ export const Chat: React.FC<ChatProps> = ({
     setIsLoading(true);
     setError(null);
 
-    // Always create a new conversation for first interaction
     if (!currentConversationId || messages.length === 0) {
       try {
-        // Set initial title based on first message
         const title =
           userContent.length > 30
             ? `${userContent.slice(0, 30)}...`
@@ -514,7 +757,6 @@ export const Chat: React.FC<ChatProps> = ({
     }
 
     try {
-      // Add user message immediately to UI
       const tempUserMessage = {
         id: 'temp-' + Date.now(),
         conversation_id: currentConversationId,
@@ -525,7 +767,6 @@ export const Chat: React.FC<ChatProps> = ({
       };
       setMessages((prev) => [...prev, tempUserMessage]);
 
-      // Add temporary loading message
       const tempLoadingMessage = {
         id: 'loading-' + Date.now(),
         conversation_id: currentConversationId,
@@ -537,7 +778,6 @@ export const Chat: React.FC<ChatProps> = ({
       };
       setMessages((prev) => [...prev, tempLoadingMessage]);
 
-      // Check if this is an image generation request
       const isImageRequest = containsImageRequest(userContent);
       if (isImageRequest) {
         setIsGeneratingImage(true);
@@ -545,25 +785,26 @@ export const Chat: React.FC<ChatProps> = ({
       }
 
       try {
-        // Insert user message
-        const { data: savedUserMessage, error: insertError } = await supabase
-          .from('chat_messages')
-          .insert({
-            conversation_id: currentConversationId,
-            role: 'user',
-            content: userContent || 'Empty message', // Provide default content if empty
-            persona_id: persona.id,
-          })
-          .select()
-          .single();
+        // Only try to save message if we have a conversation ID
+        if (currentConversationId) {
+          const { data: savedUserMessage, error: insertError } = await supabase
+            .from('chat_messages')
+            .insert({
+              conversation_id: currentConversationId,
+              role: 'user',
+              content: userContent || 'Empty message',
+              persona_id: persona.id,
+            })
+            .select()
+            .single();
 
-        if (insertError) throw insertError;
+          if (insertError) throw insertError;
+        }
 
         if (isImageRequest) {
           setImageGenerationProgress('Crafting image prompt...');
         }
 
-        // Get recent messages for context
         const currentMessages =
           recentMessages.length === 0
             ? [{ role: 'user', content: userContent }]
@@ -583,7 +824,6 @@ export const Chat: React.FC<ChatProps> = ({
           : ['helpful', 'friendly'];
         const tone = persona.tone || 'neutral';
 
-        // Log request data for debugging
         console.log('Sending chat request with data:', {
           messages: currentMessages,
           personaId: persona.id,
@@ -596,15 +836,7 @@ export const Chat: React.FC<ChatProps> = ({
             code: f.code
           })),
           userId: user.id,
-          tokensNeeded: totalTokens,
-          integrations: integrations.map((i) => ({
-            name: i.name,
-            description: i.description,
-            endpoint: i.endpoint,
-            method: i.method,
-            headers: i.headers,
-            parameters: i.parameters,
-          })),
+          tokensNeeded: totalTokens
         });
 
         if (isImageRequest) {
@@ -631,18 +863,7 @@ export const Chat: React.FC<ChatProps> = ({
                 code: f.code
               })),
               userId: user.id,
-              tokensNeeded: totalTokens,
-              integrations:
-                integrations.length > 0
-                  ? integrations.map((i) => ({
-                      name: i.name,
-                      description: i.description,
-                      endpoint: i.endpoint,
-                      method: i.method,
-                      headers: i.headers,
-                      parameters: i.parameters,
-                    }))
-                  : [],
+              tokensNeeded: totalTokens
             }),
           }
         );
@@ -650,28 +871,29 @@ export const Chat: React.FC<ChatProps> = ({
         const data = await response.json();
 
         if (response.ok) {
-          // Remove temporary loading message
           setMessages((prev) => prev.filter((m) => !m.isLoading));
 
-          // Handle image generation response
           const content = data.imageUrl
             ? `![Generated Image](${data.imageUrl})\n\n${data.message || 'Image generated successfully'}`
             : data.message || 'No response received';
 
-          // Insert assistant response
           const { error: assistantError } = await supabase
             .from('chat_messages')
             .insert({
               conversation_id: currentConversationId,
               role: 'assistant',
-              content, // Ensure content is never null
+              content,
               persona_id: persona.id,
             });
 
           if (assistantError) throw assistantError;
 
-          // Reload messages to get the new response
           await loadChatHistory(currentConversationId);
+          
+          // Play audio for the new assistant message if audio is enabled
+          if (audioEnabled && data.message) {
+            await playMessageAudio(data.message);
+          }
         } else {
           if (data.error === 'Token limit exceeded') {
             setError('Message limit reached. Please start a new conversation.');
@@ -682,14 +904,12 @@ export const Chat: React.FC<ChatProps> = ({
         }
       } catch (error: any) {
         console.error('Chat error:', error);
-        // Remove temporary loading message
         setMessages((prev) => prev.filter((m) => !m.isLoading));
 
         const errorMessage =
           error.message || 'An error occurred while processing your request';
         setError(errorMessage);
 
-        // Insert error message if we have a valid conversation ID
         if (currentConversationId) {
           await supabase.from('chat_messages').insert({
             conversation_id: currentConversationId,
@@ -704,7 +924,6 @@ export const Chat: React.FC<ChatProps> = ({
     } catch (error: any) {
       console.error('Error handling message:', error);
       setError('Failed to process message');
-      // Remove temporary messages
       setMessages((prev) =>
         prev.filter(
           (m) => !m.id.startsWith('temp-') && !m.id.startsWith('loading-')
@@ -723,36 +942,25 @@ export const Chat: React.FC<ChatProps> = ({
     }
   }, [messages]);
 
-  // Generate suggestions based on conversation context
   const generateSuggestions = async () => {
     if (!messages.length) {
-      // Default suggestions for new conversations
       setSuggestions([
         `Tell me about your expertise in ${
           persona.knowledge?.[0] || 'your field'
         }`,
         'What can you help me with?',
-        `How would you approach ${
-          persona.personality?.[0] || 'different'
-        } situations?`,
+        `How would you approach a problem in ${
+          persona.knowledge?.[0] || 'your area of expertise'
+        }?`
       ]);
       return;
     }
 
+    const recentMessages = getRecentMessages(messages);
+    
     try {
-      // Don't make the API call if we don't have a user
-      if (!user?.id) {
-        setSuggestions([
-          'Could you elaborate on that?',
-          'What are your thoughts on this?',
-          'Tell me more about your perspective',
-        ]);
-        return;
-      }
-
-      const recentMessages = messages.slice(-3); // Get last 3 messages for context
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/suggestions`,
         {
           method: 'POST',
           headers: {
@@ -760,259 +968,323 @@ export const Chat: React.FC<ChatProps> = ({
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
           body: JSON.stringify({
-            messages: [
-              ...recentMessages.map((m) => ({
-                role: m.role,
-                content: m.content,
-              })),
-              {
-                role: 'user',
-                content:
-                  'Based on our conversation, suggest 3 relevant follow-up questions or prompts. Respond with just the suggestions separated by |',
-              },
-            ],
+            messages: recentMessages,
             personaId: persona.id,
-            personality: persona.personality || ['helpful', 'friendly'],
-            knowledge: persona.knowledge || ['general knowledge'],
-            tone: persona.tone || 'neutral',
-            functions: functions.map(f => ({
-              name: f.name,
-              description: f.description,
-              code: f.code
-            })),
-            userId: user.id,
-            tokensNeeded: 100, // Small token count for suggestions
+            personality: persona.personality,
+            knowledge: persona.knowledge,
+            tone: persona.tone
           }),
         }
       );
 
-      const data = await response.json();
-      if (response.ok && data.message) {
-        setSuggestions(data.message.split('|').map((s: string) => s.trim()));
+      if (!response.ok) {
+        throw new Error('Failed to generate suggestions');
       }
+
+      const data = await response.json();
+      setSuggestions(data.suggestions);
     } catch (error) {
       console.error('Error generating suggestions:', error);
-      // Fallback suggestions
       setSuggestions([
-        'Could you elaborate on that?',
-        'What are your thoughts on this?',
-        'Tell me more about your perspective',
+        'Can you explain that in more detail?',
+        'What are the next steps?',
+        'Could you provide an example?'
       ]);
     }
   };
 
-  // Update suggestions when messages change
-  useEffect(() => {
-    if (!isLoading) {
-      generateSuggestions();
-    }
-  }, [messages, isLoading]);
-
-  const selectConversation = (conversationId: string) => {
-    setCurrentConversationId(conversationId);
-    loadChatHistory(conversationId);
-    setShowConversations(false);
+  const handleSuggestionClick = (suggestion: string) => {
+    setInput(suggestion);
+    setShowSuggestions(false);
   };
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-10rem)] md:h-[calc(100dvh-10rem)] bg-white">
-      {/* Scrollable Message Container */}
-      <div 
+    <div className={`flex flex-col h-full ${isExpanded ? 'fixed inset-0 z-50 bg-white' : ''}`}>
+      {/* Chat controls in top-right corner */}
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            toggleAudio();
+          }}
+          title={audioEnabled ? 'Disable audio' : 'Enable audio'}
+          className="bg-white/80 backdrop-blur-sm shadow-sm"
+        >
+          {audioEnabled ? (
+            <Volume2 className="w-5 h-5" />
+          ) : (
+            <VolumeX className="w-5 h-5" />
+          )}
+        </Button>
+        
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="bg-white/80 backdrop-blur-sm shadow-sm"
+        >
+          {isExpanded ? (
+            <Minimize2 className="w-5 h-5" />
+          ) : (
+            <Maximize2 className="w-5 h-5" />
+          )}
+        </Button>
+      </div>
+
+      <div
         ref={chatContainerRef}
-        className={`flex-1 overflow-y-auto px-4 py-6 space-y-4 transition-all duration-300 ease-in-out min-h-0 ${
-          isExpanded ? 'bg-gray-50' : ''
-        } ${(isLoadingHistory || isLoadingConversations) ? 'opacity-50' : ''}`}
+        className="flex-1 overflow-y-auto p-4 space-y-4 pb-20"
       >
-        {(isLoadingHistory || isLoadingConversations) && (
-          <div className="flex justify-center">
-            <div className="flex items-center gap-2 text-gray-500">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>
-                {isLoadingConversations
-                  ? 'Loading conversations...'
-                  : 'Loading chat history...'}
-              </span>
-            </div>
-          </div>
-        )}
-        {!isLoadingHistory && messages.length === 0 && (
-          <div className="text-center py-8 px-4">
-            <MessageSquare size={40} className="mx-auto text-gray-400 mb-3" />
-            <h3 className="text-lg font-medium text-gray-900 mb-1">
-              Start a Conversation
-            </h3>
-            <p className="text-gray-500 max-w-sm mx-auto">
-              Begin chatting with {persona.name} to experience their unique
-              personality and knowledge.
-            </p>
-          </div>
-        )}
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex gap-3 animate-fadeIn max-w-[85%] md:max-w-[75%] ${
+            className={`flex ${
               message.role === 'user' ? 'justify-end' : 'justify-start'
             }`}
           >
-            {message.role !== 'user' && (
-              <Avatar
-                src={persona.avatar || DEFAULT_PERSONA_AVATAR}
-                name={persona.name}
-                size="sm"
-              />
-            )}
-            <div className="relative group w-full">
+            <div
+              className={`flex items-start space-x-2 max-w-[80%] ${
+                message.role === 'user'
+                  ? 'flex-row-reverse space-x-reverse'
+                  : 'flex-row'
+              }`}
+            >
+              {message.role === 'assistant' && (
+                <Avatar
+                  src={getAvatarUrl(persona)}
+                  name={persona.name}
+                  className="w-8 h-8 mt-1"
+                />
+              )}
               <div
                 className={`rounded-lg p-3 ${
                   message.role === 'user'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-white border border-gray-200 text-gray-900 shadow-sm'
-                } ${message.isLoading ? 'animate-pulse' : ''}`}
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100'
+                }`}
               >
                 {message.isLoading ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center space-x-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Thinking...</span>
                   </div>
-                ) : message.role === 'assistant' ? (
-                  <Markdown
-                    content={message.content}
-                    className={
-                      message.role === 'user' ? 'text-white prose-invert' : ''
-                    }
-                  />
                 ) : (
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  <div className="space-y-2">
+                    <Markdown content={message.content} />
+                    <div
+                      className={`flex items-center space-x-2 mt-2 text-xs justify-end ${
+                        message.role === 'user'
+                          ? 'justify-start text-blue-200'
+                          : 'justify-end text-gray-400'
+                      }`}
+                    >
+                      {message.role === 'assistant' && (
+                       <>
+                         <button
+                           onClick={() => {
+                             const textContent = message.content.replace(/!\[.*?\]\(.*?\)/g, '').trim();
+                             speakText(textContent);
+                           }}
+                           className="hover:text-gray-600 transition-colors"
+                           title="Listen to message"
+                         >
+                           {isSpeaking && copiedMessageId === message.id ? (
+                             <VolumeX size={14} />
+                           ) : (
+                             <Volume2 size={14} />
+                           )}
+                         </button>
+                         <button
+                           onClick={() =>
+                             handleCopyMessage(message.content, message.id)
+                           }
+                           className="hover:text-gray-600 transition-colors"
+                           title="Copy message"
+                         >
+                           {copiedMessageId === message.id && !isSpeaking ? (
+                             <Check size={14} />
+                           ) : (
+                             <Copy size={14} />
+                           )}
+                         </button>
+                       </>
+                      )}
+
+                      {message.content.includes('![') && (
+                        <button
+                          onClick={() => {
+                            const imageUrl = message.content.match(
+                              /!\[.*?\]\((.*?)\)/
+                            )?.[1];
+                            if (imageUrl) {
+                              handleDownloadImage(imageUrl);
+                            }
+                          }}
+                          className="hover:text-gray-600 transition-colors"
+                          title="Download image"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
-              {!message.isLoading && message.role === 'assistant' && (
-                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-white/90 backdrop-blur-sm rounded-md shadow-sm p-1">
-                  <button
-                    onClick={() =>
-                      handleCopyMessage(message.content, message.id)
-                    }
-                    className="p-1 rounded hover:bg-gray-100 transition-colors"
-                    title="Copy message"
-                  >
-                    {copiedMessageId === message.id ? (
-                      <Check size={14} className="text-green-600" />
-                    ) : (
-                      <Copy size={14} className="text-gray-500" />
-                    )}
-                  </button>
-                  {message.content.includes('![Generated Image]') && (
-                    <button
-                      onClick={() => {
-                        const imageUrl = message.content.match(
-                          /!\[Generated Image\]\((.*?)\)/
-                        )?.[1];
-                        if (imageUrl) handleDownloadImage(imageUrl);
-                      }}
-                      className="p-1 rounded hover:bg-gray-100 transition-colors"
-                      title="Download image"
-                    >
-                      <Download size={14} className="text-gray-500" />
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
-            {message.role === 'user' && (
-              <Avatar src={undefined} name="You" size="sm" />
-            )}
           </div>
         ))}
-        {isLoading && (
-          <div className="flex items-center gap-2 text-gray-500">
-            {isGeneratingImage ? (
-              <div className="flex items-center gap-2">
-                <Image className="w-4  h-4 animate-pulse text-blue-500" />
-                <span className="text-blue-600">
-                  {imageGenerationProgress}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        )}
-      </div>
 
-      {/* Fixed Input Area */}
-      <div className="border-t border-gray-200  bg-white p-4">
+        {isGeneratingImage && (
+          <div className="flex items-center justify-center space-x-2 text-gray-500">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>{imageGenerationProgress}</span>
+          </div>
+        )}
+
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-            <AlertCircle size={16} />
-            <p className="text-sm">{error}</p>
+          <div className="flex items-center justify-center space-x-2 text-red-500">
+            <AlertCircle className="w-4 h-4" />
+            <span>{error}</span>
           </div>
         )}
+
         {tokenWarning && (
-          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2 text-yellow-700">
-            <AlertCircle size={16} />
-            <p className="text-sm">{tokenWarning}</p>
+          <div className="flex items-center justify-center space-x-2 text-yellow-500">
+            <AlertCircle className="w-4 h-4" />
+            <span>{tokenWarning}</span>
           </div>
         )}
+
         {canClaimTrial && (
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between gap-2 text-blue-700">
-            <div className="flex items-center gap-2">
-              <Sparkles size={16} />
-              <p className="text-sm">
-                Try our premium features with a free trial!
-              </p>
-            </div>
+          <div className="flex flex-col items-center justify-center p-4 space-y-2 bg-blue-50 rounded-lg">
+            <Sparkles className="w-6 h-6 text-blue-500" />
+            <p className="text-center text-sm">
+              Try our service for free! Claim your trial now.
+            </p>
             <Button
               onClick={handleClaimTrial}
               disabled={claimingTrial}
-              className="text-sm"
+              className="w-full sm:w-auto"
             >
               {claimingTrial ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Claiming...
+                  Claiming trial...
                 </>
               ) : (
-                'Claim Trial'
+                'Claim Free Trial'
               )}
             </Button>
           </div>
         )}
-        <form onSubmit={handleSubmit} className="relative">
-          <input
-            type="text"
-            value={input}
-            onChange={handleInputChange}
-            placeholder="Type your message..."
-            className="w-full p-3 pr-24 rounded-lg border border-gray-200 focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-            disabled={isLoading}
-          />
-          <div className="absolute right-2 top-2 flex items-center gap-2">
-            {isLoading ? (
-              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-            ) : (
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                className="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 shadow-md">
+        <div className="max-w-7xl mx-auto">
+          <form onSubmit={handleSubmit} className="flex items-center space-x-2">
+            <div className="flex-shrink-0">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={toggleAudio}
+                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                title={audioEnabled ? "Disable audio playback" : "Enable audio playback"}
+                aria-label={audioEnabled ? "Disable audio playback" : "Enable audio playback"}
               >
-                <Send size={20} />
-              </button>
-            )}
-          </div>
-        </form>
-        {showSuggestions && suggestions.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {suggestions.map((suggestion, index) => (
-              <button
-                key={index}
-                onClick={() => {
-                  setInput(suggestion);
-                  setShowSuggestions(false);
-                }}
-                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-full text-sm text-gray-700 transition-colors"
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
-        )}
+                {audioEnabled ? (
+                  <Volume2 className="w-5 h-5 text-blue-600" />
+                ) : (
+                  <VolumeX className="w-5 h-5 text-gray-500" />
+                )}
+              </Button>
+            </div>
+            <div className="relative flex-1">
+              <div className="flex items-center w-full border rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+                <input
+                  type="text" 
+                  value={input}
+                  onChange={handleInputChange}
+                  placeholder="Type your message..."
+                  className="flex-1 px-4 py-3 rounded-lg border-0 focus:outline-none"
+                  disabled={isLoading}
+                />
+                <div className="flex items-center pr-2 gap-1">
+                  {browserSupportsSpeechRecognition && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleVoiceInput();
+                      }}
+                      disabled={isLoading}
+                      className={`p-2 rounded-full ${
+                        isListening 
+                          ? 'bg-red-100 text-red-600 hover:bg-red-200' 
+                          : 'hover:bg-gray-100 text-gray-500'
+                      }`}
+                      title={isListening ? 'Stop voice input' : 'Start voice input'}
+                    >
+                      {isListening ? (
+                        <>
+                          <MicOff size={16} />
+                          <span className="sr-only">Stop voice input</span>
+                        </>
+                      ) : (
+                        <>
+                          <Mic size={16} />
+                          <span className="sr-only">Start voice input</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                  
+                  <button
+                    type="button"
+                    onClick={() => {
+                      generateSuggestions();
+                      setShowSuggestions(!showSuggestions);
+                    }}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full ml-1"
+                  >
+                    <MessageSquare size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <Button type="submit" disabled={isLoading || !input.trim()}>
+              {isLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
+            </Button>
+          </form>
+
+          {transcriptError && (
+            <div className="mt-2 text-red-500 text-sm flex items-center gap-1">
+              <AlertCircle size={14} className="flex-shrink-0" />
+              {transcriptError}
+            </div>
+          )}
+
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute bottom-full left-0 w-full bg-white border rounded-lg shadow-lg mb-2 max-h-48 overflow-y-auto">
+              {suggestions.map((suggestion, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleSuggestionClick(suggestion)}
+                  className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 };
+
+export default Chat;

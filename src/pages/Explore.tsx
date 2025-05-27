@@ -164,6 +164,10 @@ export const Explore = () => {
     );
   };
 
+  const handlePersonaView = (id: string) => {
+    navigate(`/explore/personas/${id}`);
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex flex-col gap-6 mb-8">
@@ -340,7 +344,7 @@ export const Explore = () => {
               key={persona.id}
               persona={persona}
               viewMode={viewMode}
-              onView={(id) => navigate(`/explore/personas/${id}`)}
+              onView={() => handlePersonaView(persona.id)}
             />
           ))}
         </div>

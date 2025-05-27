@@ -2,16 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Safe area insets for mobile devices */
-@supports(padding: max(0px)) {
-  .safe-top {
-    padding-top: max(env(safe-area-inset-top), 0px);
-  }
-  
-  .safe-bottom {
-    padding-bottom: max(env(safe-area-inset-bottom), 0px);
-  }
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
 }
+
 /* Safe area insets for mobile devices */
 @supports(padding: max(0px)) {
   .safe-top {

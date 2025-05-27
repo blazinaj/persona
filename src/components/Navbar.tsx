@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Menu, X, User, LogOut, Settings, ChevronDown, Home, Compass, Users, BookOpen, ChevronRight } from 'lucide-react';
+import { Menu, X, User, LogOut, Settings, ChevronDown, Home, Compass, Users, BookOpen, ChevronRight, Code } from 'lucide-react';
 import { AuthContext } from '../lib/AuthContext';
 import { Avatar } from './ui/Avatar';
 import Button from './ui/Button';
@@ -26,7 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
   return (
     <header className="sticky top-0 z-50 w-full bg-white border-b border-gray-200 safe-top">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
+        <nav className="flex h-16 items-center justify-between">
           {/* Logo and brand */}
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -89,11 +89,23 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
               >
                 Resources
               </NavLink>
+              <NavLink
+                to="/api"
+                className={({ isActive }) =>
+                  `inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium ${
+                    isActive
+                      ? 'border-blue-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  }`
+                }
+              >
+                API
+              </NavLink>
             </nav>
           </div>
           
           {/* Right side actions */}
-          <div className="flex items-center gap-2 md:gap-4">
+          <div className="flex items-center gap-2">
             {!user ? (
               <Button
                 variant="primary"
@@ -163,74 +175,114 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
               </button>
             </div>
           </div>
-        </div>
-        
+        </nav>
+
         {/* Mobile menu */}
         {isMenuOpen && (
-        <div className="absolute top-full left-0 right-0 bg-white border-b border-gray-200 shadow-lg md:hidden">
-          <nav className="px-4 py-2">
-            <NavLink
-              to="/"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-lg ${
-                  isActive
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`
-              }
-              end
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <Home size={20} />
-              <span>Dashboard</span>
-              <ChevronRight size={16} className="ml-auto" />
-            </NavLink>
-            <NavLink
-              to="/explore"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-lg ${
-                  isActive
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`
-              }
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <Compass size={20} />
-              <span>Explore</span>
-              <ChevronRight size={16} className="ml-auto" />
-            </NavLink>
-            <NavLink
-              to="/community"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-lg ${
-                  isActive
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`
-              }
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <Users size={20} />
-              <span>Community</span>
-              <ChevronRight size={16} className="ml-auto" />
-            </NavLink>
-            <NavLink
-              to="/resources"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-lg ${
-                  isActive
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`
-              }
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <BookOpen size={20} />
-              <span>Resources</span>
-              <ChevronRight size={16} className="ml-auto" />
-            </NavLink>
-          </nav>
+        <div className="absolute top-full left-0 right-0 bg-white border-b border-gray-200 shadow-lg md:hidden z-50">
+          <div className="divide-y divide-gray-100">
+            <div className="px-4 py-2 space-y-1">
+              <NavLink
+                to="/"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-3 rounded-lg ${
+                    isActive
+                      ? 'text-blue-600 bg-blue-50'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`
+                }
+                end
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Home size={20} />
+                <span>Dashboard</span>
+                <ChevronRight size={16} className="ml-auto" />
+              </NavLink>
+              <NavLink
+                to="/explore"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-3 rounded-lg ${
+                    isActive
+                      ? 'text-blue-600 bg-blue-50'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`
+                }
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Compass size={20} />
+                <span>Explore</span>
+                <ChevronRight size={16} className="ml-auto" />
+              </NavLink>
+              <NavLink
+                to="/community"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-3 rounded-lg ${
+                    isActive
+                      ? 'text-blue-600 bg-blue-50'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`
+                }
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Users size={20} />
+                <span>Community</span>
+                <ChevronRight size={16} className="ml-auto" />
+              </NavLink>
+              <NavLink
+                to="/resources"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-3 rounded-lg ${
+                    isActive
+                      ? 'text-blue-600 bg-blue-50'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`
+                }
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <BookOpen size={20} />
+                <span>Resources</span>
+                <ChevronRight size={16} className="ml-auto" />
+              </NavLink>
+              <NavLink
+                to="/api"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-3 rounded-lg ${
+                    isActive
+                      ? 'text-blue-600 bg-blue-50'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`
+                }
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Code size={20} />
+                <span>API</span>
+                <ChevronRight size={16} className="ml-auto" />
+              </NavLink>
+            </div>
+            
+            {/* Mobile menu actions */}
+            <div className="px-4 py-2">
+              {!user ? (
+                <Button
+                  variant="primary"
+                  fullWidth
+                  onClick={onSignIn}
+                  className="mt-2"
+                >
+                  Sign In
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  fullWidth
+                  onClick={onCreatePersona}
+                  className="mt-2"
+                >
+                  Create Persona
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
         )}
       </div>

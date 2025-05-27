@@ -5,12 +5,14 @@ import Dashboard from './components/Dashboard';
 import Explore from './pages/Explore';
 import Community from './pages/Community';
 import Resources from './pages/Resources';
-import Profile from './pages/Profile';
+import Profile from './pages/Profile'; 
+import PublicProfile from './pages/PublicProfile';
+import ApiDocs from './pages/ApiDocs';
 import ExplorerPersonaDetails from './pages/ExplorerPersonaDetails';
 import Billing from './pages/Billing';
 import CreatePersonaModal from './components/CreatePersonaModal';
 import EditPersonaModal from './components/EditPersonaModal';
-import { Login } from './pages/Login';
+import Login from './pages/Login';
 import PersonaDetails from './components/PersonaDetails';
 import { AuthModal } from './components/AuthModal';
 import { Persona } from './types';
@@ -23,6 +25,7 @@ function App() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
+  const [duplicatingPersona, setDuplicatingPersona] = useState<Persona | null>(null);
   const [user, setUser] = useState<any>(null);
   const navigate = useNavigate();
 
@@ -160,7 +163,7 @@ function App() {
   
   const handleDuplicatePersona = async (id: string) => {
     if (!user?.id) {
-      console.error('Cannot duplicate persona: No user ID available');
+      setIsAuthModalOpen(true);
       return;
     }
 
@@ -168,24 +171,15 @@ function App() {
       const personaToDuplicate = personas.find(p => p.id === id);
       if (!personaToDuplicate) return;
 
-      const { error } = await supabase
-        .from('personas')
-        .insert([{
-          name: `${personaToDuplicate.name} (Copy)`,
-          description: personaToDuplicate.description,
-          avatar: personaToDuplicate.avatar,
-          tags: personaToDuplicate.tags,
-          personality: personaToDuplicate.personality,
-          knowledge: personaToDuplicate.knowledge,
-          tone: personaToDuplicate.tone,
-          examples: personaToDuplicate.examples,
-          is_public: personaToDuplicate.isPublic,
-          user_id: user.id
-        }]);
-
-      if (error) throw error;
-
-      await fetchPersonas(user.id);
+      const duplicateData = {
+        ...personaToDuplicate,
+        name: `${personaToDuplicate.name} (Copy)`,
+        id: undefined
+      };
+      
+      setEditingPersona(null); // Close any open edit modal
+      setIsCreateModalOpen(true);
+      setDuplicatingPersona(duplicateData);
     } catch (error) {
       console.error('Error duplicating persona:', error);
     }
@@ -231,9 +225,11 @@ function App() {
     <AuthContext.Provider value={{ user, signOut: handleSignOut }}>
       <div className="min-h-screen bg-gray-50">
         {!user ? (
-          <Routes>
-            <Route path="*" element={<Login />} />
-          </Routes>
+          <div className="min-h-screen bg-white">
+            <Routes>
+              <Route path="*" element={<Login />} />
+            </Routes>
+          </div>
         ) : (
           <>
             <Navbar 
@@ -242,6 +238,10 @@ function App() {
             />
             <main className={loading ? 'opacity-50' : ''}>
               <Routes>
+                <Route path="/explore" element={<Explore />} />
+                <Route path="/explore/personas/:id" element={<ExplorerPersonaDetails personas={personas} onBack={() => navigate('/explore')} />} />
+                <Route path="/community" element={<Community />} />
+                <Route path="/resources" element={<Resources />} />
                 <Route path="/" element={
                   <Dashboard
                     personas={personas}
@@ -252,11 +252,9 @@ function App() {
                     onViewPersona={handleViewPersona}
                   />
                 } />
-                <Route path="/explore" element={<Explore />} />
-                <Route path="/explore/personas/:id" element={<ExplorerPersonaDetails personas={personas} onBack={() => navigate('/explore')} />} />
-                <Route path="/community" element={<Community />} />
-                <Route path="/resources" element={<Resources />} />
-                <Route path="/profile" element={<Profile />} />
+                <Route path="/api" element={<ApiDocs />} />
+                <Route path="/profile" element={<Profile />} /> 
+                <Route path="/profile/:id" element={<PublicProfile />} />
                 <Route path="/settings/billing" element={<Billing />} />
                 <Route path="/personas/:id" element={
                   <PersonaDetails
@@ -273,7 +271,11 @@ function App() {
         )}
         <CreatePersonaModal
           isOpen={isCreateModalOpen}
-          onClose={() => setIsCreateModalOpen(false)}
+          onClose={() => {
+            setIsCreateModalOpen(false);
+            setDuplicatingPersona(null);
+          }}
+          initialData={duplicatingPersona}
           onSubmit={handleCreateSubmit}
         />
         {editingPersona && (

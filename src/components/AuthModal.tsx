@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { X, Loader2, Mail, Chrome } from 'lucide-react';
+import { X, Loader2, Mail, Chrome, AlertCircle } from 'lucide-react';
 import Button from './ui/Button';
 import { signIn, signUp, resetPassword, signInWithGoogle } from '../lib/auth';
 
@@ -23,6 +23,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(authSchema),
@@ -62,11 +63,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   };
 
   const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    setError(null);
+    
     try {
       const { error } = await signInWithGoogle();
-      if (error) throw error;
+      if (error) {
+        console.error('Google sign-in error:', error);
+        throw error;
+      }
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -160,6 +169,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   type="button"
                   variant="outline"
                   fullWidth
+                  loading={googleLoading}
                   onClick={handleGoogleSignIn}
                   leftIcon={<Chrome size={16} />}
                 >
@@ -168,6 +178,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               </>
             )}
           </form>
+
+          {error && error.includes('Google') && (
+            <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
+              <div className="flex items-start">
+                <AlertCircle size={16} className="mt-0.5 text-yellow-600 mr-2" />
+                <div>
+                  <p className="text-sm text-yellow-700">
+                    Google sign-in may not work properly if you're using an incognito window or have strict privacy settings.
+                  </p>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    Try using a regular browser window or temporarily disable tracking prevention.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="mt-4 text-center text-sm">
             {mode === 'signin' ? (

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Star, StarOff, Eye, MessageSquare, Code, Info } from 'lucide-react';
+import { ArrowLeft, Star, StarOff, Eye, MessageSquare, Code, Info, Share2, Check } from 'lucide-react';
 import { Persona } from '../types';
-import { DEFAULT_PERSONA_AVATAR } from '../utils/constants';
+import { getAvatarUrl } from '../utils/avatarHelpers';
 import { supabase } from '../lib/supabase';
 import { AuthContext } from '../lib/AuthContext';
 import { Chat } from '../components/Chat';
@@ -11,6 +11,7 @@ import { EmbedModal } from '../components/EmbedModal';
 import { ConversationsPanel } from '../components/ConversationsPanel';
 import Button from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { Avatar } from '../components/ui/Avatar';
 
 interface ExplorerPersonaDetailsProps {
   personas: Persona[];
@@ -32,8 +33,12 @@ export const ExplorerPersonaDetails: React.FC<ExplorerPersonaDetailsProps> = ({
   const [selectedConversationId, setSelectedConversationId] = useState<string>();
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [showConversationsPanel, setShowConversationsPanel] = useState(false);
+  const [showShareTooltip, setShowShareTooltip] = useState(false);
+  const [publicPersona, setPublicPersona] = useState<Persona | null>(null);
+  const navigate = useNavigate();
 
-  const persona = personas.find(p => p.id === id);
+  // First try to find the persona in the user's personas
+  let persona = personas.find(p => p.id === id);
 
   useEffect(() => {
     if (id && user?.id) {
@@ -48,6 +53,36 @@ export const ExplorerPersonaDetails: React.FC<ExplorerPersonaDetailsProps> = ({
       fetchCreator();
     }
   }, [persona?.user_id]);
+
+  // If persona is not found in user's personas, fetch it from the database
+  useEffect(() => {
+    if (id && !persona) {
+      fetchPublicPersona(id);
+    }
+  }, [id, persona]);
+
+  const fetchPublicPersona = async (personaId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('personas')
+        .select('*')
+        .eq('id', personaId)
+        .eq('visibility', 'public')
+        .single();
+
+      if (error) throw error;
+      
+      if (data) {
+        setPublicPersona({
+          ...data,
+          created: new Date(data.created_at),
+          lastModified: new Date(data.updated_at)
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching public persona:', error);
+    }
+  };
 
   useEffect(() => {
     if (user?.id && persona?.id) {
@@ -177,7 +212,41 @@ export const ExplorerPersonaDetails: React.FC<ExplorerPersonaDetailsProps> = ({
     }
   };
 
-  if (!persona || persona.visibility !== 'public') {
+  // Use either the user's persona or the fetched public persona
+  const displayPersona = persona || publicPersona;
+
+  const handleShare = async () => {
+    if (!displayPersona) return;
+    
+    const shareUrl = `${window.location.origin}/explore/personas/${displayPersona.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Chat with ${displayPersona.name}`,
+          text: displayPersona.description || `Check out this AI persona: ${displayPersona.name}`,
+          url: shareUrl
+        });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        setShowShareTooltip(true);
+        setTimeout(() => setShowShareTooltip(false), 2000);
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
+  if (!displayPersona) {
+    // Show loading state instead of immediately redirecting
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Only allow public personas to be viewed in explorer
+  if (displayPersona.visibility !== 'public') {
     return <Navigate to="/explore" replace />;
   }
 
@@ -195,13 +264,13 @@ export const ExplorerPersonaDetails: React.FC<ExplorerPersonaDetailsProps> = ({
                 <ArrowLeft size={20} className="text-gray-600" />
               </button>
               <div className="flex items-center gap-2">
-                <img
-                  src={persona.avatar || DEFAULT_PERSONA_AVATAR}
-                  alt={persona.name}
-                  className="w-8 h-8 rounded-full object-cover"
+                <Avatar
+                  src={displayPersona.avatar}
+                  name={displayPersona.name}
+                  size="sm"
                 />
                 <div className="flex flex-col">
-                  <h1 className="text-lg font-semibold text-gray-900 truncate">{persona.name}</h1>
+                  <h1 className="text-lg font-semibold text-gray-900 truncate">{displayPersona.name}</h1>
                   {creator && (
                     <p className="text-sm text-gray-500">by {creator.email}</p>
                   )}
@@ -244,6 +313,21 @@ export const ExplorerPersonaDetails: React.FC<ExplorerPersonaDetailsProps> = ({
                 >
                   Embed
                 </Button>
+                <div className="relative">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    leftIcon={showShareTooltip ? <Check size={16} /> : <Share2 size={16} />}
+                    onClick={handleShare}
+                  >
+                    {showShareTooltip ? 'Copied!' : 'Share'}
+                  </Button>
+                  {showShareTooltip && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded">
+                      Link copied!
+                    </div>
+                  )}
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -262,9 +346,9 @@ export const ExplorerPersonaDetails: React.FC<ExplorerPersonaDetailsProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex flex-col md:flex-row gap-6">
           {/* Chat section */}
-          <div className="flex-1">
-            <Chat 
-              persona={persona}
+          <div className="flex-1 h-[calc(100vh-10rem)]">
+            <Chat
+              persona={displayPersona}
               isLoadingConversations={isLoadingConversations}
               selectedConversationId={selectedConversationId}
               showConversationsButton={user !== null}
@@ -295,7 +379,7 @@ export const ExplorerPersonaDetails: React.FC<ExplorerPersonaDetailsProps> = ({
                     const { data, error } = await supabase
                       .from('conversations')
                       .insert({
-                        persona_id: persona.id,
+                        persona_id: displayPersona.id,
                         title: 'New Conversation',
                         user_id: user.id
                       })
@@ -347,8 +431,8 @@ export const ExplorerPersonaDetails: React.FC<ExplorerPersonaDetailsProps> = ({
           {/* Details sidebar */}
           {showDetails && (
             <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom">
-              <DetailsPanel
-                persona={persona}
+              <DetailsPanel 
+                persona={displayPersona}
                 onClose={() => setShowDetails(false)}
               />
             </div>
@@ -358,7 +442,7 @@ export const ExplorerPersonaDetails: React.FC<ExplorerPersonaDetailsProps> = ({
           <EmbedModal
             isOpen={showEmbedModal}
             onClose={() => setShowEmbedModal(false)}
-            personaId={persona.id}
+            personaId={displayPersona.id}
           />
         </div>
       </div>

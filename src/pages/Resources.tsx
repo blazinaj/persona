@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Book, Code, Puzzle, Zap, MessageSquare, Users, Star, Wrench, Lock, Globe, Search, ChevronRight, ArrowRight, Bookmark, BookOpen } from 'lucide-react';
+import { Image as ImageIcon } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { categories, articles } from '../data/articles';
@@ -14,6 +15,7 @@ export const Resources = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'relevance' | 'date'>('relevance');
   const [recentlyViewed, setRecentlyViewed] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_RECENT);
@@ -63,12 +65,29 @@ export const Resources = () => {
     const matchesSearch = searchTerm === '' || 
       article.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       article.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      article.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+      article.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      article.content.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesCategory = !selectedCategory || article.category === selectedCategory;
 
     return matchesSearch && matchesCategory;
-  }), [searchTerm, selectedCategory]);
+  }), [searchTerm, selectedCategory])
+  .sort((a, b) => {
+    if (sortBy === 'date') {
+      return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
+    }
+    // For relevance, prioritize title matches, then description, then content
+    if (searchTerm) {
+      const aTitle = a.title.toLowerCase().includes(searchTerm.toLowerCase());
+      const bTitle = b.title.toLowerCase().includes(searchTerm.toLowerCase());
+      if (aTitle !== bTitle) return bTitle ? 1 : -1;
+      
+      const aDesc = a.description.toLowerCase().includes(searchTerm.toLowerCase());
+      const bDesc = b.description.toLowerCase().includes(searchTerm.toLowerCase());
+      if (aDesc !== bDesc) return bDesc ? 1 : -1;
+    }
+    return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -91,13 +110,23 @@ export const Resources = () => {
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search size={20} className="text-gray-400" />
               </div>
-              <input
+              <div className="flex gap-2">
+                <input
                 type="text"
                 placeholder="Search documentation..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
+                className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-l-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'relevance' | 'date')}
+                  className="px-4 py-3 border border-gray-300 rounded-r-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="relevance">Sort by Relevance</option>
+                  <option value="date">Sort by Date</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -233,6 +262,9 @@ export const Resources = () => {
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
                           {article.title}
+                          {new Date(article.lastUpdated) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) && (
+                            <Badge variant="primary" className="ml-2">New</Badge>
+                          )}
                         </h3>
                         <button
                           onClick={(e) => {

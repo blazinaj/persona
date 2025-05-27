@@ -1,10 +1,10 @@
 import React from 'react';
 import { MoreHorizontal, Edit, Copy, Trash, ExternalLink, MessageSquare, Star, StarOff, Users, Eye, EyeOff, Globe } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { Persona } from '../types';
-import { DEFAULT_PERSONA_AVATAR } from '../utils/constants';
+import { getAvatarUrl } from '../utils/avatarHelpers';
 import { Card, CardContent, CardFooter } from './ui/Card';
 import { Badge } from './ui/Badge';
+import { Portal } from './ui/Portal';
 import { Avatar } from './ui/Avatar';
 import { formatRelativeTime } from '../utils/formatters';
 
@@ -34,10 +34,18 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
   onToggleFavorite,
 }) => {
   const [showMenu, setShowMenu] = React.useState(false);
-  const navigate = useNavigate();
+  const [menuPosition, setMenuPosition] = React.useState({ top: 0, left: 0 });
+  const menuButtonRef = React.useRef<HTMLButtonElement>(null);
 
   const handleMenuToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (menuButtonRef.current) {
+      const rect = menuButtonRef.current.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.left - 120,
+      });
+    }
     setShowMenu(!showMenu);
   };
 
@@ -65,7 +73,7 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
 
   const handleAction = (
     e: React.MouseEvent,
-    action: (id: string) => void | undefined
+    action: ((id: string) => void) | undefined
   ) => {
     e.stopPropagation();
     setShowMenu(false);
@@ -81,18 +89,24 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
     }
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (onView) {
+      onView(persona.id);
+    }
+  };
+
   if (viewMode === 'list') {
     return (
       <div
         className={`group bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all cursor-pointer overflow-hidden active:scale-[0.99] select-none ${
           isCompact ? 'py-2 px-3' : 'p-4'
         }`}
-        onClick={() => navigate(`/explore/personas/${persona.id}`)}
+        onClick={handleCardClick}
       >
         <div className="flex items-center gap-3">
           {!isCompact && (
             <Avatar
-              src={persona.avatar || DEFAULT_PERSONA_AVATAR}
+              src={getAvatarUrl(persona.avatar)}
               name={persona.name}
               size="sm"
               className="ring-2 ring-offset-2 ring-gray-100"
@@ -151,6 +165,7 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
             )}
             <div className="relative">
                 <button
+                  ref={menuButtonRef}
                   onClick={handleMenuToggle}
                   className="p-1 rounded-full hover:bg-gray-100"
                   aria-label="More options"
@@ -159,28 +174,42 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
                 </button>
                 
                 {showMenu && (
-                  <div className="absolute right-0 z-10 mt-1 w-48 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                    <div className="py-1">
-                      <button
-                        className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                        onClick={(e) => handleAction(e, onEdit)}
+                  <Portal>
+                    <div 
+                      className="fixed inset-0 z-50"
+                      onClick={() => setShowMenu(false)}
+                    >
+                      <div
+                        className="absolute bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+                        style={{
+                          top: menuPosition.top,
+                          left: menuPosition.left
+                        }}
+                        onClick={e => e.stopPropagation()}
                       >
-                        <Edit size={16} className="mr-2" /> Edit
-                      </button>
-                      <button
-                        className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                        onClick={(e) => handleAction(e, onDuplicate)}
-                      >
-                        <Copy size={16} className="mr-2" /> Duplicate
-                      </button>
-                      <button
-                        className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-                        onClick={(e) => handleAction(e, onDelete)}
-                      >
-                        <Trash size={16} className="mr-2" /> Delete
-                      </button>
+                        <div className="py-1">
+                          <button
+                            className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            onClick={(e) => handleAction(e, onEdit)}
+                          >
+                            <Edit size={16} className="mr-2" /> Edit
+                          </button>
+                          <button
+                            className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            onClick={(e) => handleAction(e, onDuplicate)}
+                          >
+                            <Copy size={16} className="mr-2" /> Duplicate
+                          </button>
+                          <button
+                            className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                            onClick={(e) => handleAction(e, onDelete)}
+                          >
+                            <Trash size={16} className="mr-2" /> Delete
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </Portal>
                 )}
               </div>
           </div>
@@ -192,14 +221,19 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
   return (
     <Card 
       className="h-full transition-transform duration-200 hover:-translate-y-1 cursor-pointer active:scale-[0.99] select-none" 
-      onClick={() => navigate(`/explore/personas/${persona.id}`)}
+      onClick={handleCardClick}
     >
       <CardContent className="relative p-0 group">
         <div className="relative h-40 md:h-48 bg-gradient-to-br from-blue-500/90 to-purple-600/90 overflow-hidden">
           <img
-            src={persona.avatar || DEFAULT_PERSONA_AVATAR}
+            src={getAvatarUrl(persona.avatar)}
             alt={persona.name}
             className="h-full w-full object-cover mix-blend-overlay opacity-90 transition-transform duration-500 group-hover:scale-110"
+            onError={(e) => {
+              // Fallback to gradient background if image fails to load
+              e.currentTarget.style.display = 'none';
+              e.currentTarget.onerror = null;
+            }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
           <div className="absolute top-4 right-4">
@@ -239,6 +273,7 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
             </div>
             <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
               <button
+                ref={menuButtonRef}
                 onClick={handleMenuToggle}
                 className="p-1 rounded-full hover:bg-gray-100"
                 aria-label="More options"
@@ -247,28 +282,42 @@ export const PersonaCard: React.FC<PersonaCardProps> = ({
               </button>
               
               {showMenu && (
-                <div className="absolute right-0 z-10 mt-1 w-48 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                  <div className="py-1">
-                    <button
-                      className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={(e) => handleAction(e, onEdit)}
+                <Portal>
+                  <div 
+                    className="fixed inset-0 z-50"
+                    onClick={() => setShowMenu(false)}
+                  >
+                    <div
+                      className="absolute bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+                      style={{
+                        top: menuPosition.top,
+                        left: menuPosition.left
+                      }}
+                      onClick={e => e.stopPropagation()}
                     >
-                      <Edit size={16} className="mr-2" /> Edit
-                    </button>
-                    <button
-                      className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={(e) => handleAction(e, onDuplicate)}
-                    >
-                      <Copy size={16} className="mr-2" /> Duplicate
-                    </button>
-                    <button
-                      className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-                      onClick={(e) => handleAction(e, onDelete)}
-                    >
-                      <Trash size={16} className="mr-2" /> Delete
-                    </button>
+                      <div className="py-1">
+                        <button
+                          className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={(e) => handleAction(e, onEdit)}
+                        >
+                          <Edit size={16} className="mr-2" /> Edit
+                        </button>
+                        <button
+                          className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={(e) => handleAction(e, onDuplicate)}
+                        >
+                          <Copy size={16} className="mr-2" /> Duplicate
+                        </button>
+                        <button
+                          className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                          onClick={(e) => handleAction(e, onDelete)}
+                        >
+                          <Trash size={16} className="mr-2" /> Delete
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </Portal>
               )}
             </div>
           </div>

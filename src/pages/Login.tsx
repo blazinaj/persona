@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Mail, Lock, Loader2, ArrowRight, Chrome } from 'lucide-react';
+import { Mail, Lock, Loader2, ArrowRight, Chrome, AlertCircle, Check } from 'lucide-react';
 import Button from '../components/ui/Button';
 import { signIn, signUp, signInWithGoogle } from '../lib/auth';
 
@@ -12,9 +12,11 @@ const authSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-export const Login = () => {
+const Login = () => {
   const [mode, setMode] = React.useState<'signin' | 'signup'>('signin');
   const [loading, setLoading] = React.useState(false);
+  const [googleLoading, setGoogleLoading] = React.useState(false);
+  const [success, setSuccess] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -25,14 +27,19 @@ export const Login = () => {
   const onSubmit = async (data: any) => {
     setLoading(true);
     setError(null);
+    setSuccess(null);
 
     try {
-      const { error } = mode === 'signin' 
-        ? await signIn(data.email, data.password)
-        : await signUp(data.email, data.password);
+      if (mode === 'signin') {
+        const { error } = await signIn(data.email, data.password);
+        if (error) throw error;
+        navigate('/');
+      } else {
+        const { error } = await signUp(data.email, data.password);
+        if (error) throw error;
+        setSuccess('Account created! Please check your email to confirm your account.');
+      }
 
-      if (error) throw error;
-      navigate('/');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -41,11 +48,20 @@ export const Login = () => {
   };
 
   const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    setError(null);
+    setSuccess(null);
+    
     try {
       const { error } = await signInWithGoogle();
-      if (error) throw error;
+      if (error) {
+        console.error('Google sign-in error:', error);
+        throw error;
+      }
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -102,6 +118,13 @@ export const Login = () => {
                 <p className="mt-1 text-sm text-red-600">{errors.password.message as string}</p>
               )}
             </div>
+          
+            {success && (
+              <div className="rounded-lg bg-green-50 p-4 flex items-center gap-2">
+                <Check size={16} className="text-green-500" />
+                <p className="text-sm text-green-700">{success}</p>
+              </div>
+            )}
 
             {error && (
               <div className="rounded-lg bg-red-50 p-4">
@@ -132,6 +155,7 @@ export const Login = () => {
             <Button
               type="button"
               variant="outline"
+              loading={googleLoading}
               fullWidth
               size="lg"
               onClick={handleGoogleSignIn}
@@ -139,6 +163,22 @@ export const Login = () => {
             >
               Google
             </Button>
+
+            {error && error.includes('Google') && (
+              <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle size={16} className="mt-0.5 text-yellow-600 mr-2" />
+                  <div>
+                    <p className="text-sm text-yellow-700">
+                      Google sign-in may not work properly if you're using an incognito window or have strict privacy settings.
+                    </p>
+                    <p className="text-sm text-yellow-700 mt-1">
+                      Try using a regular browser window or temporarily disable tracking prevention.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="text-center">
               <button
@@ -194,3 +234,5 @@ export const Login = () => {
     </div>
   );
 };
+
+export default Login;

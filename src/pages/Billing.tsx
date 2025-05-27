@@ -398,7 +398,7 @@ export const Billing = () => {
                   className="mt-6"
                   onClick={() => handleSelectPlan(plan.id)}
                   disabled={processingPlan === plan.id || !plan.price_id?.startsWith('price_')}
-                  leftIcon={processingPlan === plan.id ? <Loader2 className="animate-spin" /> : undefined}
+                  loading={processingPlan === plan.id}
                 >
                   {subscription?.plan_id === plan.id ? 'Current Plan' : 'Select Plan'}
                 </Button>

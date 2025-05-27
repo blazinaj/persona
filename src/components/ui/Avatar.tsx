@@ -1,6 +1,7 @@
 import React from 'react';
+import { getAvatarUrl } from '../../utils/avatarHelpers';
 
-type AvatarSize = 'sm' | 'md' | 'lg' | 'xl';
+type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 interface AvatarProps {
   src?: string;
@@ -18,6 +19,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   className = ''
 }) => {
   const sizes = {
+    xs: 'h-6 w-6 text-xs',
     sm: 'h-8 w-8 text-xs',
     md: 'h-10 w-10 text-sm',
     lg: 'h-12 w-12 text-base',
@@ -40,9 +42,14 @@ export const Avatar: React.FC<AvatarProps> = ({
     <div className={classes}>
       {src ? (
         <img
-          src={src}
+          src={getAvatarUrl(src)}
           alt={alt}
           className="h-full w-full object-cover"
+          onError={(e) => {
+            // Fallback to initials if image fails to load
+            e.currentTarget.style.display = 'none';
+            e.currentTarget.onerror = null;
+          }}
         />
       ) : name ? (
         <span className="font-medium text-gray-600">

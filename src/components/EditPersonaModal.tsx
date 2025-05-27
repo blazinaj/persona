@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { X, Upload } from 'lucide-react';
+import { X, Upload, Image as ImageIcon } from 'lucide-react';
 import Button from './ui/Button';
+import { getAvatarUrl } from '../utils/avatarHelpers';
 import { Persona, PersonalityTrait } from '../types';
+import AvatarGenerator from './AvatarGenerator';
 
 const personalityTraits: PersonalityTrait[] = [
   'friendly',
@@ -20,7 +22,7 @@ const personalityTraits: PersonalityTrait[] = [
 const editPersonaSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50),
   description: z.string().max(200).optional(),
-  avatar: z.string().url('Please enter a valid image URL').optional().or(z.literal('')),
+  avatar: z.string().optional().or(z.literal('')),
   tags: z.array(z.string()).optional(),
   personality: z.array(z.string()).optional(),
   customPersonality: z.string().optional(),
@@ -45,6 +47,7 @@ export const EditPersonaModal: React.FC<EditPersonaModalProps> = ({
   onClose,
   onSubmit
 }) => {
+  const [showAvatarGenerator, setShowAvatarGenerator] = useState(false);
   const { register, handleSubmit, formState: { errors }, watch, setValue } = useForm<EditPersonaForm>({
     resolver: zodResolver(editPersonaSchema),
     defaultValues: {
@@ -129,16 +132,20 @@ export const EditPersonaModal: React.FC<EditPersonaModalProps> = ({
                 <input
                   type="text"
                   {...register('avatar')}
-                  className="flex-1 rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className="flex-1 rounded-l-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   placeholder="Enter image URL"
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  leftIcon={<Upload size={16} />}
-                >
-                  Upload
-                </Button>
+                <div className="flex">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    leftIcon={<ImageIcon size={16} />}
+                    className="rounded-l-none rounded-r-md"
+                    onClick={() => setShowAvatarGenerator(true)}
+                  >
+                    Generate
+                  </Button>
+                </div>
               </div>
               {errors.avatar && (
                 <p className="mt-1 text-sm text-red-600">{errors.avatar.message}</p>
@@ -228,6 +235,17 @@ export const EditPersonaModal: React.FC<EditPersonaModalProps> = ({
             </div>
           </form>
         </div>
+        
+        {showAvatarGenerator && (
+          <AvatarGenerator
+            onSelectAvatar={(url) => {
+              setValue('avatar', url);
+              setShowAvatarGenerator(false);
+            }}
+            onClose={() => setShowAvatarGenerator(false)}
+            initialAvatar={watch('avatar')}
+          />
+        )}
       </div>
     </div>
   );

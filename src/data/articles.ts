@@ -1,4 +1,5 @@
 import { Book, Code, Puzzle, Zap, MessageSquare, Users, Star, Wrench, Lock, Globe } from 'lucide-react';
+import { Image as ImageIcon } from 'lucide-react';
 
 export interface Article {
   id: string;
@@ -59,6 +60,18 @@ export const categories: Category[] = [
     title: 'Community',
     icon: Users,
     description: 'Connect with other persona creators'
+  },
+  {
+    id: 'avatar-generator',
+    title: 'Avatar Generator',
+    icon: ImageIcon, 
+    description: 'Create custom avatars for your personas'
+  },
+  {
+    id: 'custom-functions',
+    title: 'Custom Functions',
+    icon: Code,
+    description: 'Extend personas with custom JavaScript functions'
   }
 ];
 
@@ -231,5 +244,101 @@ const response = await fetch('https://api.persona.ai/v1/chat', {
 - Monitor usage`,
     tags: ['api', 'authentication', 'security'],
     lastUpdated: '2025-05-14'
+  },
+  {
+    id: 'avatar-generator-guide',
+    title: 'Using the Avatar Generator',
+    description: 'Learn how to create custom avatars for your personas using AI or by uploading your own images.',
+    category: 'avatar-generator',
+    content: `# Avatar Generator
+
+The Avatar Generator is a powerful feature that allows you to create custom avatars for your personas using AI or by uploading your own images.
+
+## Overview
+
+The Avatar Generator provides two main methods for creating persona avatars:
+
+1. **AI Generation**: Create unique avatars by describing them in natural language
+2. **Image Upload**: Upload your own images to use as avatars
+
+## AI Avatar Generation
+
+### How It Works
+
+The AI Avatar Generator uses DALL-E 3 to create high-quality, custom avatars based on your text descriptions. The system is optimized for creating professional-looking profile pictures and avatars.
+
+### Using the AI Generator
+
+1. Navigate to the persona creation or edit screen
+2. Click the "Generate" button next to the Avatar URL field
+3. In the Avatar Generator modal, select the "AI Generate" tab
+4. Enter a detailed description of the avatar you want to create
+5. Select a style from the available options
+6. Click "Generate Avatar"
+7. Once generated, you can download, copy the URL, or use the avatar directly
+
+### Writing Effective Prompts
+
+For best results, include details about:
+
+- **Facial features**: Eyes, hair, skin tone, facial structure
+- **Expression**: Smiling, serious, thoughtful
+- **Style**: Professional, casual, artistic
+- **Lighting**: Soft, dramatic, natural
+- **Background**: Simple, gradient, contextual`,
+    tags: ['avatar', 'AI', 'customization'],
+    lastUpdated: '2025-05-18'
+  },
+  {
+    id: 'custom-functions-guide',
+    title: 'Implementing Custom Functions',
+    description: 'Learn how to extend your personas with custom JavaScript functions for advanced capabilities.',
+    category: 'custom-functions',
+    content: `# Custom Functions
+
+Custom Functions allow you to extend your personas with JavaScript code that can be executed during chat interactions. This powerful feature enables your personas to perform calculations, format data, make API calls, and more.
+
+## Overview
+
+Custom Functions are JavaScript functions that:
+
+- Are associated with a specific persona
+- Can be called during chat interactions
+- Run in a secure, sandboxed environment
+- Return structured data that the persona can use in its responses
+
+## Creating Custom Functions
+
+### Access the Function Editor
+
+1. Navigate to your persona's detail page
+2. Click the "Functions" button in the top navigation
+3. Click "Add Function" to create a new function
+
+### Function Structure
+
+Each function must follow this structure:
+
+\`\`\`javascript
+async function execute(input) {
+  try {
+    // Your code here
+    
+    // Return success response with result
+    return { 
+      success: true, 
+      result: "Your result here" 
+    };
+  } catch (error) {
+    // Return error response
+    return { 
+      success: false, 
+      error: error.message 
+    };
+  }
+}
+\`\`\``,
+    tags: ['functions', 'javascript', 'development'],
+    lastUpdated: '2025-05-19'
   }
 ];
