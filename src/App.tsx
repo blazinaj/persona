@@ -224,13 +224,7 @@ function App() {
   return (
     <AuthContext.Provider value={{ user, signOut: handleSignOut }}>
       <div className="min-h-screen bg-gray-50">
-        {!user ? (
-          <div className="min-h-screen bg-white">
-            <Routes>
-              <Route path="*" element={<Login />} />
-            </Routes>
-          </div>
-        ) : (
+        {user ? (
           <>
             <Navbar 
               onCreatePersona={handleCreatePersona}
@@ -268,6 +262,8 @@ function App() {
               </Routes>
             </main>
           </>
+        ) : (
+          <Login />
         )}
         <CreatePersonaModal
           isOpen={isCreateModalOpen}

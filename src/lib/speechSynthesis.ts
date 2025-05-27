@@ -9,12 +9,14 @@ export function getVoiceForPersona(persona: Persona): string {
   let voice = 'alloy';
   
   // Check if persona has explicit voice settings
-  if (persona.voice?.gender) {
+  if (persona?.voice?.gender) {
     // Map gender preference to appropriate voice
     if (persona.voice.gender === 'female') {
       voice = 'nova'; // Female voice
     } else if (persona.voice.gender === 'male') {
       voice = 'onyx'; // Male voice
+    } else if (persona.voice.gender === 'neutral') {
+      voice = 'alloy'; // Neutral voice
     }
   } else {
     // Otherwise infer from personality and tone
@@ -46,7 +48,7 @@ export function getSpeechSpeed(persona: Persona): number {
   let speed = 1.0;
   
   // Use explicit settings if available
-  if (persona.voice?.rate) {
+  if (persona?.voice?.rate) {
     return persona.voice.rate;
   }
   
@@ -69,10 +71,34 @@ export function getSpeechSpeed(persona: Persona): number {
   return speed;
 }
 
+// Function to get pitch for speech synthesis
+export function getSpeechPitch(persona: Persona): number {
+  // Default pitch
+  let pitch = 1.0;
+  
+  // Use explicit settings if available
+  if (persona?.voice?.pitch) {
+    return persona.voice.pitch;
+  }
+  
+  // Otherwise infer from personality, tone, and age
+  const isYoung = persona?.voice?.age === 'young';
+  const isElderly = persona?.voice?.age === 'elderly';
+  
+  // Adjust pitch based on age
+  if (isYoung) {
+    pitch = 1.2; // Higher pitch for younger voices
+  } else if (isElderly) {
+    pitch = 0.8; // Lower pitch for elderly voices
+  }
+  
+  return pitch;
+}
+
 // Function to clean text for speech synthesis
 export function cleanTextForSpeech(text: string): string {
   return text
-    .replace(/!\[.*?\]\(.*?\)/g, 'Image') // Replace image markdown
+    .replace(/!\[.*?\]\(.*?\)/g, '') // Remove image markdown
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1') // Replace links with just the text
     .replace(/```[\s\S]*?```/g, 'Code block') // Replace code blocks
     .replace(/`([^`]+)`/g, '$1') // Remove inline code formatting

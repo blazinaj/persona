@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { text, voice = 'alloy', speed = 1.0, personaId } = await req.json();
+    const { text, voice = 'alloy', speed = 1.0, pitch = 1.0, personaId } = await req.json();
 
     if (!text) {
       throw new Error('Text is required');
@@ -35,6 +35,7 @@ Deno.serve(async (req) => {
       model: 'tts-1',
       voice: voice,
       input: cleanText,
+      // Note: OpenAI TTS API doesn't support pitch adjustment directly
       speed: speed
     });
 

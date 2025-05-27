@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { X, Upload, Image as ImageIcon } from 'lucide-react';
 import Button from './ui/Button';
+import VoiceSettings from './VoiceSettings';
 import { getAvatarUrl } from '../utils/avatarHelpers';
 import { Persona, PersonalityTrait } from '../types';
 import AvatarGenerator from './AvatarGenerator';
@@ -29,6 +30,13 @@ const editPersonaSchema = z.object({
   knowledge: z.array(z.string()).optional(),
   tone: z.string().optional(),
   examples: z.array(z.string()).optional(),
+  voice: z.object({
+    gender: z.enum(['male', 'female', 'neutral']).optional(),
+    age: z.enum(['young', 'middle-aged', 'elderly']).optional(),
+    accent: z.string().optional(),
+    pitch: z.number().min(0.5).max(2.0).optional(),
+    rate: z.number().min(0.5).max(2.0).optional()
+  }).optional(),
   visibility: z.enum(['private', 'unlisted', 'public']).default('private')
 });
 
@@ -58,6 +66,7 @@ export const EditPersonaModal: React.FC<EditPersonaModalProps> = ({
       personality: persona.personality || [],
       knowledge: persona.knowledge || [],
       tone: persona.tone || '',
+      voice: persona.voice || {},
       examples: persona.examples || [],
       visibility: persona.visibility || 'private'
     }
@@ -209,6 +218,18 @@ export const EditPersonaModal: React.FC<EditPersonaModalProps> = ({
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Voice Settings
+                <span className="text-gray-400 text-xs ml-1">(optional)</span>
+              </label>
+              <VoiceSettings 
+                register={register} 
+                watch={watch} 
+                setValue={setValue} 
+              />
             </div>
 
             <div>

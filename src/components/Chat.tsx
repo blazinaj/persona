@@ -20,14 +20,18 @@ import {
 } from 'lucide-react';
 import { Persona } from '../types';
 import { getAvatarUrl } from '../utils/avatarHelpers';
-import { Markdown } from './ui/Markdown';
 import { Avatar } from './ui/Avatar';
 import Button from './ui/Button';
 import { supabase } from '../lib/supabase';
 import { ConversationsPanel } from './ConversationsPanel';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import useSpeechRecognition from '../hooks/useSpeechRecognition';
-import { getVoiceForPersona, getSpeechSpeed } from '../lib/speechSynthesis';
+import { getVoiceForPersona, getSpeechSpeed, getSpeechPitch } from '../lib/speechSynthesis';
+import ChatMessage from './chat/ChatMessage';
+import ChatHeader from './chat/ChatHeader';
+import ChatInput from './chat/ChatInput';
+import ChatSuggestions from './chat/ChatSuggestions';
+import { useAudioPlayback } from '../hooks/useAudioPlayback';
 
 interface ChatProps {
   persona: Persona;
@@ -83,13 +87,19 @@ export const Chat: React.FC<ChatProps> = ({
   const editInputRef = useRef<HTMLInputElement>(null);
   const [isListening, setIsListening] = useState(false);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [audioEnabled, setAudioEnabled] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const currentAudioUrlRef = useRef<string | null>(null);
+  const lastPlayedMessageRef = useRef<string | null>(null);
+  const [transcript, setTranscriptState] = useState('');
 
   const {
-    transcript,
+    isSpeaking,
+    audioEnabled,
+    toggleAudio,
+    speakText,
+    stopSpeaking
+  } = useAudioPlayback(persona);
+
+  const {
+    transcript: speechTranscript,
     resetTranscript,
     startListening,
     stopListening,
@@ -109,67 +119,11 @@ export const Chat: React.FC<ChatProps> = ({
   }, [browserSupportsSpeechRecognition, isSpeechSupported]);
 
   useEffect(() => {
-    if (transcript) {
-      setInput(transcript);
+    if (speechTranscript) {
+      setTranscriptState(speechTranscript);
+      setInput(speechTranscript);
     }
   }, [transcript]);
-
-  useEffect(() => {
-    if (transcript) {
-      setInput(transcript);
-    }
-  }, [transcript]);
-
-  useEffect(() => {
-    const audio = new Audio();
-    audioRef.current = audio;
-    
-    audio.addEventListener('ended', () => {
-      setIsSpeaking(false);
-    });
-    
-    audio.addEventListener('error', (e) => {
-      if (e?.target?.error?.code === 4) {
-        return
-      }
-      console.error('Audio playback error:', {
-        error: e?.toString(),
-        errorCode: e.target?.error?.code,
-        errorMessage: e.target?.error?.message,
-        currentSrc: audio.currentSrc,
-        readyState: audio.readyState
-      });
-      
-      setIsSpeaking(false);
-      setError('Failed to play audio. Please try again.');
-    });
-
-    audio.addEventListener('canplay', () => {
-      if (audioEnabled && !audio.paused) {
-        audio.play().catch(err => {
-          console.error('Error during audio play:', err);
-          setIsSpeaking(false);
-          setError('Failed to start audio playback.');
-        });
-      }
-    });
-    
-    return () => {
-      try {
-        if (audio) {
-          audio.pause();
-          audio.src = '';
-        }
-        
-        if (currentAudioUrlRef.current) {
-          URL.revokeObjectURL(currentAudioUrlRef.current);
-          currentAudioUrlRef.current = null;
-        }
-      } catch (err) {
-        console.error('Error during audio cleanup:', err);
-      }
-    };
-  }, []);
 
   // Helper function to play audio for a specific message
   const playMessageAudio = async (text: string) => {
@@ -177,131 +131,11 @@ export const Chat: React.FC<ChatProps> = ({
       await speakText(text);
     } else if (!audioEnabled) {
       // If audio is disabled, enable it first then play
-      setAudioEnabled(true);
+      toggleAudio();
       await speakText(text);
     }
   };
   
-  const speakText = async (text: string) => {
-    if (!audioRef.current || !audioEnabled || !text) {
-      console.log('Skipping audio playback - conditions not met:', {
-        hasAudioRef: Boolean(audioRef.current),
-        hasText: Boolean(text)
-      });
-      return;
-    }
-    
-    try {
-      stopSpeaking();
-      
-      setIsSpeaking(true);
-     setCopiedMessageId(null); // Reset any copied message state
-      setError(null);
-      
-      const voice = getVoiceForPersona(persona);
-      const speed = getSpeechSpeed(persona);
-      
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-          },
-          body: JSON.stringify({
-            text,
-            voice,
-            speed,
-            personaId: persona.id
-          })
-        }
-      );
-      
-      if (!response.ok) {
-        throw new Error(`Speech generation failed: ${response.status} ${response.statusText}`);
-      }
-      
-      const audioBlob = await response.blob();
-      
-      if (!audioBlob || audioBlob.size === 0) {
-        throw new Error('Received empty audio data');
-      }
-      
-      if (currentAudioUrlRef.current) {
-        URL.revokeObjectURL(currentAudioUrlRef.current);
-      }
-      
-      const audioUrl = URL.createObjectURL(audioBlob);
-      currentAudioUrlRef.current = audioUrl;
-      
-      if (!audioRef.current) {
-        throw new Error('Audio element not initialized');
-      }
-
-      // Verify the audio URL is valid before setting it
-      if (!audioUrl) {
-        throw new Error('Failed to create audio URL');
-      }
-      
-      // Set the audio source and attempt playback
-      audioRef.current.src = audioUrl;
-      
-      try {
-        // Wait for the audio to be loaded before playing
-        if (audioRef.current) {
-          await audioRef.current.play();
-        }
-      } catch (playError) {
-        console.error('Error playing audio:', playError);
-        setIsSpeaking(false);
-      }
-    } catch (error: any) {
-      console.error('Error generating or playing speech:', error);
-      setIsSpeaking(false);
-      setError(`Audio playback failed: ${error.message}`);
-      
-      if (currentAudioUrlRef.current) {
-        URL.revokeObjectURL(currentAudioUrlRef.current);
-        currentAudioUrlRef.current = null;
-      }
-
-      // Reset audio element state
-      if (audioRef.current) {
-        audioRef.current.src = '';
-      }
-    }
-  };
-  
-  const stopSpeaking = () => {
-    try {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        audioRef.current.src = ''; // Clear the source
-      }
-     setCopiedMessageId(null); // Reset copied message ID when stopping speech
-    } catch (err) {
-      console.error('Error stopping audio:', err);
-    } finally {
-      setIsSpeaking(false);
-    }
-  };
-  
-  const toggleAudio = () => {
-    try {
-      if (audioEnabled) {
-        stopSpeaking();
-        setAudioEnabled(false);
-      } else {
-        setAudioEnabled(true);
-      }
-    } catch (err) {
-      console.error('Error toggling audio:', err);
-      setError('Failed to toggle audio. Please try again.');
-    }
-  };
-
   useEffect(() => {
     if (speechError) {
       setTranscriptError(speechError);
@@ -316,12 +150,21 @@ export const Chat: React.FC<ChatProps> = ({
   }, []);
 
   useEffect(() => {
-    
-    if (!firstRender || !audioEnabled || !messages.length) return;
+    // Only run this effect when messages change and audio is enabled
+    if (!audioEnabled || !messages.length) return;
     
     try {
       const lastMessage = messages[messages.length - 1];
-      if (lastMessage?.role === 'assistant' && !lastMessage.isLoading) {
+      
+      // Check if this is a new message that hasn't been played yet
+      if (lastMessage?.role === 'assistant' && 
+          !lastMessage.isLoading && 
+          lastMessage.id !== lastPlayedMessageRef.current && 
+          !isLoading) {
+        
+        // Mark this message as played
+        lastPlayedMessageRef.current = lastMessage.id;
+        
         // Extract text content from markdown
         const textContent = lastMessage.content.replace(/!\[.*?\]\(.*?\)/g, '').trim();
         if (textContent) {
@@ -331,14 +174,16 @@ export const Chat: React.FC<ChatProps> = ({
     } catch (err) {
       console.error('Error playing message audio:', err);
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, audioEnabled]);
 
   const toggleVoiceInput = () => {
     if (isListening) {
       stopListening();
+      console.log('Stopping voice input');
       setIsListening(false);
     } else {
       resetTranscript();
+      console.log('Starting voice input');
       startListening();
       setIsListening(true);
     }
@@ -364,75 +209,6 @@ export const Chat: React.FC<ChatProps> = ({
     
     fetchUserProfile();
   }, [user?.id]);
-
-  const handleCopyMessage = async (content: string, messageId: string) => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopiedMessageId(messageId);
-      setTimeout(() => setCopiedMessageId(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy message:', err);
-    }
-  };
-
-  const handleDownloadImage = async (imageUrl: string) => {
-    try {
-      if (!imageUrl || !imageUrl.startsWith('http')) {
-        throw new Error('Invalid image URL');
-      }
-
-      let response = await fetch(imageUrl, {
-        mode: 'cors',
-        headers: {
-          Accept: 'image/*',
-        },
-      });
-
-      if (!response.ok && response.type === 'opaque') {
-        response = await fetch(imageUrl, {
-          mode: 'no-cors',
-          headers: {
-            Accept: 'image/*',
-          },
-        });
-      }
-
-      if (!response.ok && response.status !== 0) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (contentType && !contentType.startsWith('image/')) {
-        throw new Error('Invalid content type: Expected an image');
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-
-      const extension = contentType ? contentType.split('/')[1] : 'png';
-      link.download = `generated-image-${Date.now()}.${extension}`;
-
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      console.error('Image download error:', err);
-      let errorMessage = 'Failed to download image';
-
-      if (err.message.includes('Invalid image URL')) {
-        errorMessage = 'Invalid image URL provided';
-      } else if (err.message.includes('HTTP error')) {
-        errorMessage = `Failed to fetch image: ${err.message}`;
-      } else if (err.message.includes('Invalid content type')) {
-        errorMessage = 'Invalid file type: Expected an image';
-      }
-
-      setError(errorMessage);
-    }
-  };
 
   useEffect(() => {
     setCurrentConversationId(selectedConversationId);
@@ -993,146 +769,31 @@ export const Chat: React.FC<ChatProps> = ({
     }
   };
 
-  const handleSuggestionClick = (suggestion: string) => {
-    setInput(suggestion);
-    setShowSuggestions(false);
-  };
-
   return (
     <div className={`flex flex-col h-full ${isExpanded ? 'fixed inset-0 z-50 bg-white' : ''}`}>
-      {/* Chat controls in top-right corner */}
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => {
-            toggleAudio();
-          }}
-          title={audioEnabled ? 'Disable audio' : 'Enable audio'}
-          className="bg-white/80 backdrop-blur-sm shadow-sm"
-        >
-          {audioEnabled ? (
-            <Volume2 className="w-5 h-5" />
-          ) : (
-            <VolumeX className="w-5 h-5" />
-          )}
-        </Button>
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="bg-white/80 backdrop-blur-sm shadow-sm"
-        >
-          {isExpanded ? (
-            <Minimize2 className="w-5 h-5" />
-          ) : (
-            <Maximize2 className="w-5 h-5" />
-          )}
-        </Button>
-      </div>
+      <ChatHeader
+        audioEnabled={audioEnabled}
+        toggleAudio={toggleAudio}
+        isExpanded={isExpanded}
+        setIsExpanded={setIsExpanded}
+      />
 
       <div
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-4 space-y-4 pb-20"
       >
         {messages.map((message) => (
-          <div
+          <ChatMessage
             key={message.id}
-            className={`flex ${
-              message.role === 'user' ? 'justify-end' : 'justify-start'
-            }`}
-          >
-            <div
-              className={`flex items-start space-x-2 max-w-[80%] ${
-                message.role === 'user'
-                  ? 'flex-row-reverse space-x-reverse'
-                  : 'flex-row'
-              }`}
-            >
-              {message.role === 'assistant' && (
-                <Avatar
-                  src={getAvatarUrl(persona)}
-                  name={persona.name}
-                  className="w-8 h-8 mt-1"
-                />
-              )}
-              <div
-                className={`rounded-lg p-3 ${
-                  message.role === 'user'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100'
-                }`}
-              >
-                {message.isLoading ? (
-                  <div className="flex items-center space-x-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Thinking...</span>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Markdown content={message.content} />
-                    <div
-                      className={`flex items-center space-x-2 mt-2 text-xs justify-end ${
-                        message.role === 'user'
-                          ? 'justify-start text-blue-200'
-                          : 'justify-end text-gray-400'
-                      }`}
-                    >
-                      {message.role === 'assistant' && (
-                       <>
-                         <button
-                           onClick={() => {
-                             const textContent = message.content.replace(/!\[.*?\]\(.*?\)/g, '').trim();
-                             speakText(textContent);
-                           }}
-                           className="hover:text-gray-600 transition-colors"
-                           title="Listen to message"
-                         >
-                           {isSpeaking && copiedMessageId === message.id ? (
-                             <VolumeX size={14} />
-                           ) : (
-                             <Volume2 size={14} />
-                           )}
-                         </button>
-                         <button
-                           onClick={() =>
-                             handleCopyMessage(message.content, message.id)
-                           }
-                           className="hover:text-gray-600 transition-colors"
-                           title="Copy message"
-                         >
-                           {copiedMessageId === message.id && !isSpeaking ? (
-                             <Check size={14} />
-                           ) : (
-                             <Copy size={14} />
-                           )}
-                         </button>
-                       </>
-                      )}
-
-                      {message.content.includes('![') && (
-                        <button
-                          onClick={() => {
-                            const imageUrl = message.content.match(
-                              /!\[.*?\]\((.*?)\)/
-                            )?.[1];
-                            if (imageUrl) {
-                              handleDownloadImage(imageUrl);
-                            }
-                          }}
-                          className="hover:text-gray-600 transition-colors"
-                          title="Download image"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+            message={message}
+            persona={persona}
+            isSpeaking={isSpeaking}
+            copiedMessageId={copiedMessageId}
+            setCopiedMessageId={setCopiedMessageId}
+            speakText={speakText}
+            stopSpeaking={stopSpeaking}
+            setError={setError}
+          />
         ))}
 
         {isGeneratingImage && (
@@ -1181,105 +842,33 @@ export const Chat: React.FC<ChatProps> = ({
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 shadow-md">
-        <div className="max-w-7xl mx-auto">
-          <form onSubmit={handleSubmit} className="flex items-center space-x-2">
-            <div className="flex-shrink-0">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={toggleAudio}
-                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-                title={audioEnabled ? "Disable audio playback" : "Enable audio playback"}
-                aria-label={audioEnabled ? "Disable audio playback" : "Enable audio playback"}
-              >
-                {audioEnabled ? (
-                  <Volume2 className="w-5 h-5 text-blue-600" />
-                ) : (
-                  <VolumeX className="w-5 h-5 text-gray-500" />
-                )}
-              </Button>
-            </div>
-            <div className="relative flex-1">
-              <div className="flex items-center w-full border rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
-                <input
-                  type="text" 
-                  value={input}
-                  onChange={handleInputChange}
-                  placeholder="Type your message..."
-                  className="flex-1 px-4 py-3 rounded-lg border-0 focus:outline-none"
-                  disabled={isLoading}
-                />
-                <div className="flex items-center pr-2 gap-1">
-                  {browserSupportsSpeechRecognition && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        toggleVoiceInput();
-                      }}
-                      disabled={isLoading}
-                      className={`p-2 rounded-full ${
-                        isListening 
-                          ? 'bg-red-100 text-red-600 hover:bg-red-200' 
-                          : 'hover:bg-gray-100 text-gray-500'
-                      }`}
-                      title={isListening ? 'Stop voice input' : 'Start voice input'}
-                    >
-                      {isListening ? (
-                        <>
-                          <MicOff size={16} />
-                          <span className="sr-only">Stop voice input</span>
-                        </>
-                      ) : (
-                        <>
-                          <Mic size={16} />
-                          <span className="sr-only">Start voice input</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-                  
-                  <button
-                    type="button"
-                    onClick={() => {
-                      generateSuggestions();
-                      setShowSuggestions(!showSuggestions);
-                    }}
-                    className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full ml-1"
-                  >
-                    <MessageSquare size={16} />
-                  </button>
-                </div>
-              </div>
-            </div>
-            <Button type="submit" disabled={isLoading || !input.trim()}>
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
-            </Button>
-          </form>
-
-          {transcriptError && (
-            <div className="mt-2 text-red-500 text-sm flex items-center gap-1">
-              <AlertCircle size={14} className="flex-shrink-0" />
-              {transcriptError}
-            </div>
-          )}
-
+        <div className="relative">
+          <ChatInput
+            input={input}
+            setInput={setInput}
+            handleInputChange={handleInputChange}
+            transcript={transcript}
+            isLoading={isLoading}
+            handleSubmit={handleSubmit}
+            audioEnabled={audioEnabled}
+            toggleAudio={toggleAudio}
+            isListening={isListening}
+            toggleVoiceInput={toggleVoiceInput}
+            browserSupportsSpeechRecognition={browserSupportsSpeechRecognition}
+            transcriptError={transcriptError}
+            generateSuggestions={generateSuggestions}
+            showSuggestions={showSuggestions}
+            setShowSuggestions={setShowSuggestions}
+          />
+          
           {showSuggestions && suggestions.length > 0 && (
-            <div className="absolute bottom-full left-0 w-full bg-white border rounded-lg shadow-lg mb-2 max-h-48 overflow-y-auto">
-              {suggestions.map((suggestion, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleSuggestionClick(suggestion)}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
+            <ChatSuggestions
+              suggestions={suggestions}
+              onSuggestionClick={(suggestion: string) => {
+                setInput(suggestion);
+                setShowSuggestions(false);
+              }}
+            />
           )}
         </div>
       </div>

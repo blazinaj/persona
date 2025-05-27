@@ -18,3 +18,15 @@ html, body, #root {
     padding-bottom: max(env(safe-area-inset-bottom), 0px);
   }
 }
+
+/* Improve touch targets on mobile */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+/* Improve input on mobile */
+@media (max-width: 640px) {
+  input, button {
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+}

@@ -49,6 +49,22 @@ export const PersonaAIForm: React.FC<PersonaAIFormProps> = ({ onSuggest }) => {
         throw new Error(data.error || 'Failed to get suggestions');
       }
 
+      // Ensure examples are strings
+      const processedExamples = data.examples?.map((example: any) => {
+        if (typeof example === 'object' && example.interaction) {
+          return example.interaction;
+        } else if (typeof example === 'object' && example !== null) {
+          try {
+            return JSON.stringify(example);
+          } catch (e) {
+            return 'Example interaction';
+          }
+        }
+        return typeof example === 'string' ? example : 
+               example !== null && example !== undefined ? String(example) : 
+               'Example interaction';
+      });
+
       // Parse suggestions from AI response
       const suggestions = {
         name: data.name,
@@ -57,7 +73,7 @@ export const PersonaAIForm: React.FC<PersonaAIFormProps> = ({ onSuggest }) => {
         personality: data.personality,
         knowledge: data.knowledge,
         tone: data.tone,
-        examples: data.examples
+        examples: processedExamples || []
       };
 
       onSuggest(suggestions);

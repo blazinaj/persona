@@ -362,7 +362,7 @@ export const ExplorerPersonaDetails: React.FC<ExplorerPersonaDetailsProps> = ({
 
           {/* Conversations Panel */}
           {showConversationsPanel && (
-            <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom">
+            <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom h-[70vh] md:h-auto z-20">
               <ConversationsPanel
                 conversations={conversations}
                 currentConversationId={selectedConversationId}
@@ -430,7 +430,7 @@ export const ExplorerPersonaDetails: React.FC<ExplorerPersonaDetailsProps> = ({
 
           {/* Details sidebar */}
           {showDetails && (
-            <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom">
+            <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom h-[70vh] md:h-auto z-20">
               <DetailsPanel 
                 persona={displayPersona}
                 onClose={() => setShowDetails(false)}

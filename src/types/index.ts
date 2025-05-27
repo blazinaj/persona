@@ -10,7 +10,6 @@ export type Persona = {
   knowledge?: string[];
   tone?: string;
   examples?: string[];
-  visibility: 'private' | 'unlisted' | 'public';
   voice?: {
     gender?: 'male' | 'female' | 'neutral';
     age?: 'young' | 'middle-aged' | 'elderly';
@@ -18,6 +17,7 @@ export type Persona = {
     pitch?: number;
     rate?: number;
   };
+  visibility: 'private' | 'unlisted' | 'public';
 };
 
 export type Conversation = {

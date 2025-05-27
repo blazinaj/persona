@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { X, Upload, Check, Plus, Tag, Brain, MessageSquare, Code, Image as ImageIcon } from 'lucide-react';
 import PersonaAIForm from './PersonaAIForm';
+import VoiceSettings from './VoiceSettings';
 import { getAvatarUrl } from '../utils/avatarHelpers';
 import Button from './ui/Button';
 import { PersonalityTrait, PersonaTemplate, CommunicationTone, KnowledgeArea } from '../types';
@@ -53,6 +54,13 @@ const createPersonaSchema = z.object({
   knowledge: z.array(z.string()).optional(),
   customKnowledge: z.string().optional(),
   tone: z.string().optional(),
+  voice: z.object({
+    gender: z.enum(['male', 'female', 'neutral']).optional(),
+    age: z.enum(['young', 'middle-aged', 'elderly']).optional(),
+    accent: z.string().optional(),
+    pitch: z.number().min(0.5).max(2.0).optional(),
+    rate: z.number().min(0.5).max(2.0).optional()
+  }).optional(),
   examples: z.array(z.string()).optional(),
   customExample: z.string().optional(),
   visibility: z.enum(['private', 'unlisted', 'public']).default('private')
@@ -90,7 +98,6 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [showAvatarGenerator, setShowAvatarGenerator] = useState(false);
 
-  // Initialize form with initial data
   React.useEffect(() => {
     if (initialData) {
       setValue('name', initialData.name);
@@ -101,6 +108,7 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
       setValue('knowledge', initialData.knowledge || []);
       setValue('tone', initialData.tone || 'neutral');
       setValue('examples', initialData.examples || []);
+      setValue('voice', initialData.voice || {});
       setValue('visibility', initialData.visibility || 'private');
     }
   }, [initialData, setValue]);
@@ -136,7 +144,7 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
     const customExample = watch('customExample');
     if (customExample) {
       const currentExamples = watch('examples') || [];
-      setValue('examples', [...currentExamples, customExample]);
+      setValue('examples', [...currentExamples, String(customExample)]);
       setValue('customExample', '');
     }
   };
@@ -173,7 +181,6 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
             </button>
           </div>
 
-          {/* AI Form */}
           <PersonaAIForm 
             onSuggest={(suggestions) => {
               if (suggestions.name) setValue('name', suggestions.name);
@@ -187,7 +194,6 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
           />
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {/* Template Selection */}
             <div className="mb-8">
               {!initialData && (
                 <>
@@ -508,6 +514,18 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
+                Voice Settings
+                <span className="text-gray-400 text-xs ml-1">(optional)</span>
+              </label>
+              <VoiceSettings 
+                register={register} 
+                watch={watch} 
+                setValue={setValue} 
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Example Interactions
                 <span className="text-gray-400 text-xs ml-1">(optional)</span>
               </label>
@@ -530,12 +548,18 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
                   </Button>
                 </div>
                 <div className="space-y-2">
-                  {watch('examples')?.map((example, index) => (
+                  {(watch('examples') || []).map((example, index) => (
                     <div
                       key={index}
                       className="group flex items-start gap-2 p-3 rounded bg-gray-50"
                     >
-                      <p className="flex-1 text-sm text-gray-700">{example}</p>
+                      <p className="flex-1 text-sm text-gray-700">
+                        {typeof example === 'string' 
+                          ? example 
+                          : typeof example === 'object' && example !== null
+                            ? example.interaction || JSON.stringify(example)
+                            : String(example)}
+                      </p>
                       <button
                         type="button"
                         onClick={() => {

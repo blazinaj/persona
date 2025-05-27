@@ -459,7 +459,7 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
 
         {/* Sidebars */}
         {activePanel === 'conversations' && (
-          <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom">
+          <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom h-[70vh] md:h-auto z-20">
             <ConversationsPanel
               conversations={conversations}
               currentConversationId={selectedConversationId}
@@ -473,7 +473,7 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
         )}
 
         {activePanel === 'details' && (
-          <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom">
+          <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom h-[70vh] md:h-auto z-20">
             <DetailsPanel
               persona={persona}
               onClose={() => setActivePanel(null)}
@@ -483,7 +483,7 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
 
         {/* Functions sidebar */}
         {activePanel === 'functions' && (
-          <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom h-[80vh] md:h-auto">
+          <div className="fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom h-[70vh] md:h-auto z-20">
             <FunctionsPanel
               functions={functions}
               onAddFunction={() => setIsAddingFunction(true)}
