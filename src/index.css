@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, 
+body, 
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Add xs breakpoint for extra small screens */
+@media (min-width: 480px) {
+  .xs\:block {
+    display: block;
+  }
+  
+  .xs\:hidden {
+    display: none;
+  }
+  
+  .xs\:pl-4 {
+    padding-left: 1rem;
+  }
+  
+  .xs\:mr-1 {
+    margin-right: 0.25rem;
+  }
+  
+  .xs\:inline {
+    display: inline;
+  }
+}
+
+/* Safe area insets for mobile devices */
+@supports(padding: max(0px)) {
+  .pb-env-safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+  }
+  
+  .safe-top {
+    padding-top: max(env(safe-area-inset-top), 0px);
+  }
+  
+  .safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
+  }
+  
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+  }
+}
+
+/* Hide scrollbars but keep functionality */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+/* Smooth scrolling */
+.scroll-smooth {
+  scroll-behavior: smooth;
+}
+
+/* Chat layout styles */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  padding-bottom: 5rem; /* Space for input */
+}
+
+.chat-input-container {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+}
+
+@media (min-width: 768px) {
+  .chat-input-container {
+    padding-bottom: 0;
+  }
+}
+
+/* Interactive chat elements */
+.interactive-keyword {
+  border-bottom: 1px dotted #3b82f6;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: background-color 0.2s;
+}
+
+.interactive-keyword:hover {
+  background-color: #eff6ff;
+  border-radius: 2px;
+}
+
+.interactive-checklist {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  transition: background-color 0.2s;
+}
+
+.interactive-checklist:hover {
+  background-color: #f3f4f6;
+}
+
+.interactive-checklist.checked {
+  color: #10b981;
+}
+
+.interactive-button {
+  display: inline-flex;
+  align-items: center;
+  background-color: #eff6ff;
+  color: #2563eb;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.interactive-button:hover {
+  background-color: #dbeafe;
+}
+
+.interactive-button::after {
+  content: "→";
+  margin-left: 0.25rem;
+}
+
+/* Improve input on mobile */
+@media (max-width: 640px) {
+  input, textarea {
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+  
+  /* Improve scrolling on iOS */
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Adjust for mobile keyboard */
+  .chat-input-container {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
