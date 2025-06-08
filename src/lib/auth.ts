@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import {AuthContext} from './AuthContext';
 
 // Helper to determine if we're in production (using a variable instead of a function)
 const isProduction = window.location.hostname === 'personify.mobi' || 
@@ -8,7 +7,7 @@ const isProduction = window.location.hostname === 'personify.mobi' ||
 export async function signInWithGoogle() {
   // Set the correct redirect URL based on environment
   const redirectTo = isProduction
-    ? 'https://www.personify.mobi/auth/callback'
+    ? 'https://personify.mobi/auth/callback'
     : `${window.location.origin}/auth/callback`;
 
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -55,4 +54,57 @@ export async function updatePassword(password: string) {
     password,
   });
   return { data, error };
+}
+
+// Function to delete user account
+export async function deleteAccount(userId: string) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user || user.id !== userId) {
+      return { 
+        success: false, 
+        error: 'Not authorized to delete this account' 
+      };
+    }
+    
+    // Get the current session to use the access token
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      return {
+        success: false,
+        error: 'No active session'
+      };
+    }
+
+    // Call the Edge Function to delete the account
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user-account`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({})
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Failed to delete account: ${response.status}`);
+    }
+    
+    // Sign out after successful deletion
+    await signOut();
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to delete account'
+    };
+  }
 }

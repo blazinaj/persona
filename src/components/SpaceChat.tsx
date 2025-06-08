@@ -2,7 +2,6 @@ import React, { useRef, useEffect, useState } from 'react';
 import {
   Send,
   Loader2,
-  Smile,
   Plus,
   MessageSquare,
   Bot,
@@ -13,6 +12,14 @@ import {
   Search,
   MessageSquare as MessageSquareIcon,
   X,
+  Image as ImageIcon,
+  FileText,
+  Table,
+  Download,
+  Copy,
+  Check,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Button from './ui/Button';
@@ -22,11 +29,22 @@ import { Markdown } from './ui/Markdown';
 import { formatDate } from '../utils/formatters';
 import { Space, SpaceMessage, Persona } from '../types';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { isPDFRequest, extractDocumentSections, generatePDFReport } from '../utils/pdfHelpers';
+import { isLikelyCSV, parseCSV, csvToHtmlTable } from '../utils/csvHelpers';
+import PdfViewer from './ui/PdfViewer';
+import SpreadsheetDisplay from './ui/SpreadsheetDisplay';
 
 interface SpaceChatProps {
   space: Space;
   currentUserId: string;
   personas: Persona[];
+}
+
+// Interface for interactive elements
+interface InteractiveElement {
+  type: 'keyword' | 'checklist' | 'button';
+  text: string;
+  value: string;
 }
 
 const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas }) => {
@@ -39,6 +57,7 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
   const [respondingPersonas, setRespondingPersonas] = useState<{id: string, name: string, avatar?: string}[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [lastMessageId, setLastMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const coordinatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -48,6 +67,18 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
   const isScrollingRef = useRef(false);
   const isMobile = useMediaQuery('(max-width: 640px)');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Advanced features state
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [imageGenerationProgress, setImageGenerationProgress] = useState<string>('');
+  const [pdfData, setPdfData] = useState<string | null>(null);
+  const [showPdf, setShowPdf] = useState(false);
+  const [csvData, setCsvData] = useState<string | null>(null);
+  const [showSpreadsheet, setShowSpreadsheet] = useState(false);
+  const [interactiveElements, setInteractiveElements] = useState<InteractiveElement[]>([]);
+  const [checkedItems, setCheckedItems] = useState<string[]>([]);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [audioEnabled, setAudioEnabled] = useState(false);
 
   useEffect(() => {
     console.log('Space component initialized with space ID:', space.id);
@@ -88,18 +119,47 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
     // Get the new message data
     const newMessage = payload.new;
     
-    // Instead of trying to determine sender info here, reload the entire chat history
-    // This ensures we get the correct sender information from the database
-    console.log('Reloading chat history after receiving new message');
-    loadChatHistory();
-    
-    // Process message based on type (using the raw message data)
-    if (newMessage.persona_id) {
-      setRespondingPersonas(prev => 
-        prev.filter(p => p.id !== newMessage.persona_id)
-      );
-      console.log(`Removing persona ${newMessage.persona_id} from responding list`);
+    // Don't add duplicate messages
+    if (lastMessageId === newMessage.id) {
+      console.log('Duplicate message detected, skipping update');
+      return;
     }
+    
+    setLastMessageId(newMessage.id);
+    
+    // Format the message for display
+    getSenderInfo(newMessage).then(({ senderName, senderAvatar, isPersona }) => {
+      const formattedMessage: SpaceMessage = {
+        id: newMessage.id,
+        spaceId: newMessage.space_id,
+        content: newMessage.content,
+        personaId: newMessage.persona_id,
+        userId: newMessage.user_id,
+        createdAt: new Date(newMessage.created_at),
+        senderName,
+        senderAvatar,
+        isPersona
+      };
+      
+      // Add to messages
+      setMessages(prevMessages => [...prevMessages, formattedMessage]);
+      
+      // Process new message content if it's from a persona
+      if (newMessage.persona_id) {
+        processPersonaMessageContent(formattedMessage);
+        
+        // Remove persona from responding list
+        setRespondingPersonas(prev => 
+          prev.filter(p => p.id !== newMessage.persona_id)
+        );
+        console.log(`Removing persona ${newMessage.persona_id} from responding list`);
+      }
+      
+      // If it's a user message, check for advanced features
+      if (newMessage.user_id && !newMessage.persona_id) {
+        checkForAdvancedFeatures(newMessage.content);
+      }
+    });
     
     // Clear coordinator thinking state when any message arrives
     setCoordinatorThinking(false);
@@ -112,6 +172,176 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
     
     // Generate new suggestions based on the updated conversation
     generateSuggestions();
+  };
+
+  // Function to get sender information
+  const getSenderInfo = async (message: any) => {
+    let senderName = "User";
+    let senderAvatar = null;
+    let isPersona = false;
+    
+    if (message.persona_id) {
+      // Get persona info
+      isPersona = true;
+      const { data: persona } = await supabase
+        .from('personas')
+        .select('name, avatar')
+        .eq('id', message.persona_id)
+        .single();
+        
+      if (persona) {
+        senderName = persona.name;
+        senderAvatar = persona.avatar;
+      }
+    } else if (message.user_id) {
+      // Get user info
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name, avatar_url')
+        .eq('id', message.user_id)
+        .single();
+        
+      if (profile) {
+        senderName = profile.display_name || 'User';
+        senderAvatar = profile.avatar_url;
+      } else {
+        // Fallback to user email
+        const { data: user } = await supabase
+          .auth
+          .admin
+          .getUserById(message.user_id);
+          
+        if (user?.user?.email) {
+          senderName = user.user.email;
+        }
+      }
+    }
+    
+    return { senderName, senderAvatar, isPersona };
+  };
+
+  // Process persona message content for special features
+  const processPersonaMessageContent = (message: SpaceMessage) => {
+    // Check for image URLs
+    checkForImageUrls(message.content);
+    
+    // Check for PDF data or requests
+    checkForPdfData(message.content);
+    
+    // Check for CSV data
+    checkForCsvData(message.content);
+    
+    // Extract interactive elements
+    extractInteractiveElements(message.content);
+  };
+
+  // Check for image URLs in messages
+  const checkForImageUrls = (content: string) => {
+    const imageUrlRegex = /!\[(.*?)\]\((https:\/\/[^)]+)\)/g;
+    const matches = [...content.matchAll(imageUrlRegex)];
+    
+    if (matches.length > 0) {
+      // We found an image - no need to set any state,
+      // the Markdown component will render it
+      console.log('Found image in message:', matches[0][2]);
+    }
+  };
+
+  // Check message for PDF data
+  const checkForPdfData = (content: string) => {
+    // Check if the message contains a PDF data URL
+    const pdfDataUrl = content.match(/data:application\/pdf;base64,[^"')]+/);
+    if (pdfDataUrl) {
+      setPdfData(pdfDataUrl[0]);
+      setShowPdf(true);
+      return;
+    }
+
+    // Check for PDF file link
+    const pdfLinkRegex = /(https?:\/\/[^\s]+\.pdf)/gi;
+    const pdfLinkMatch = content.match(pdfLinkRegex);
+    if (pdfLinkMatch && pdfLinkMatch[0]) {
+      setPdfData(pdfLinkMatch[0]);
+      setShowPdf(true);
+      return;
+    }
+    
+    // Check for a PDF context with URL
+    if (content.includes("I've created a PDF") || content.includes("PDF document")) {
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const urlMatch = content.match(urlRegex);
+      if (urlMatch && urlMatch[0]) {
+        setPdfData(urlMatch[0]);
+        setShowPdf(true);
+      }
+    }
+  };
+
+  // Check for CSV data in messages
+  const checkForCsvData = (content: string) => {
+    // Extract CSV data from code blocks
+    const csvRegex = /```(?:csv)?\s*\n([\s\S]*?)\n```/g;
+    let match;
+    
+    while ((match = csvRegex.exec(content)) !== null) {
+      const potentialCsv = match[1].trim();
+      
+      if (isLikelyCSV(potentialCsv)) {
+        setCsvData(potentialCsv);
+        setShowSpreadsheet(true);
+        return;
+      }
+    }
+  };
+
+  // Extract interactive elements from message content
+  const extractInteractiveElements = (content: string) => {
+    const elements: InteractiveElement[] = [];
+    
+    // Extract checklist items - format: - [ ] Item text
+    const checklistRegex = /- \[([ x])\] (.+?)(?=\n|$)/g;
+    let checklistMatch;
+    while ((checklistMatch = checklistRegex.exec(content)) !== null) {
+      elements.push({
+        type: 'checklist',
+        text: checklistMatch[2],
+        value: `I've completed: ${checklistMatch[2]}`
+      });
+    }
+    
+    // Extract keywords with dotted underlines - format: [keyword]{.interactive}
+    const keywordRegex = /\[([^\]]+)\]\{\.interactive\}/g;
+    let keywordMatch;
+    while ((keywordMatch = keywordRegex.exec(content)) !== null) {
+      elements.push({
+        type: 'keyword',
+        text: keywordMatch[1],
+        value: `Tell me more about ${keywordMatch[1]}`
+      });
+    }
+    
+    // Extract button links - format: [Button Text](send:message to send)
+    const buttonRegex = /\[([^\]]+)\]\(send:([^)]+)\)/g;
+    let buttonMatch;
+    while ((buttonMatch = buttonRegex.exec(content)) !== null) {
+      elements.push({
+        type: 'button',
+        text: buttonMatch[1],
+        value: buttonMatch[2]
+      });
+    }
+    
+    if (elements.length > 0) {
+      setInteractiveElements(elements);
+    }
+  };
+
+  // Handle interactive element actions
+  const handleInteractiveElementClick = (element: InteractiveElement) => {
+    if (element.type === 'checklist') {
+      setCheckedItems(prev => [...prev, element.text]);
+    }
+    setInput(element.value);
   };
 
   // Scroll to bottom on initial load and when new messages are added
@@ -227,14 +457,80 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
         isPersona: message.is_persona
       }));
       
+      if (transformedMessages.length > 0) {
+        // Set the last message ID to prevent duplicates
+        setLastMessageId(transformedMessages[transformedMessages.length - 1].id);
+      }
+      
       console.log('Transformed messages:', transformedMessages);
       setMessages(transformedMessages);
+      
+      // Process persona messages for special features
+      transformedMessages.forEach(msg => {
+        if (msg.isPersona) {
+          processPersonaMessageContent(msg);
+        }
+      });
     } catch (error) {
       console.error('Error loading chat history:', error);
       setError('Failed to load chat history');
     } finally {
       setIsLoadingHistory(false);
     }
+  };
+
+  // Check for advanced features in user messages
+  const checkForAdvancedFeatures = (content: string) => {
+    // Check for image generation request
+    const isImageRequest = containsImageRequest(content);
+    if (isImageRequest) {
+      setIsGeneratingImage(true);
+      setImageGenerationProgress('Analyzing image request...');
+    }
+    
+    // Check for PDF request
+    const isPdfReq = isPDFRequest(content);
+    if (isPdfReq) {
+      setImageGenerationProgress('Preparing document content...');
+    }
+  };
+
+  // Function to check if message is requesting image generation
+  const containsImageRequest = (message: string): boolean => {
+    const imageKeywords = [
+      'generate an image',
+      'create an image',
+      'make an image',
+      'draw',
+      'create a picture',
+      'generate a picture',
+      'make a picture',
+      'visualize',
+      'show me',
+      'create art',
+      'design',
+      'illustrate',
+      'paint',
+      'render'
+    ];
+    
+    const message_lower = message.toLowerCase();
+    
+    // Check for direct matches
+    if (imageKeywords.some(keyword => message_lower.includes(keyword))) {
+      return true;
+    }
+    
+    // Check for implied image requests
+    const impliedPatterns = [
+      /how .* looks?/i,
+      /can .* visual/i,
+      /create .* scene/i,
+      /make .* look like/i,
+      /generate .* visual/i
+    ];
+    
+    return impliedPatterns.some(pattern => pattern.test(message));
   };
 
   const generateSuggestions = async () => {
@@ -298,6 +594,19 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
     console.log(`Sending message to space ${space.id}:`, messageContent);
     
     try {
+      // Check for advanced features
+      const isImageRequest = containsImageRequest(messageContent);
+      const isPdfReq = isPDFRequest(messageContent);
+      
+      if (isImageRequest) {
+        setIsGeneratingImage(true);
+        setImageGenerationProgress('Analyzing request...');
+      }
+      
+      if (isPdfReq) {
+        setImageGenerationProgress('Preparing document content...');
+      }
+      
       // Insert the user message with proper user_id
       const { data, error } = await supabase
         .from('space_messages')
@@ -314,10 +623,23 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
       }
 
       console.log('User message inserted successfully:', data);
+      
+      // Set this message as the last message ID to prevent duplicates from realtime
+      if (data && data[0]) {
+        setLastMessageId(data[0].id);
+      }
 
       // Manually trigger the room coordinator function
       try {
         console.log('Calling room coordinator for space:', space.id);
+        
+        // Get space features from settings
+        const features = {
+          enableImages: true,
+          enablePDFs: true,
+          enableSpreadsheets: true,
+          enableInteractiveElements: true
+        };
         
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/room-coordinator`,
@@ -329,7 +651,8 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
             },
             body: JSON.stringify({ 
               spaceId: space.id,
-              messageId: data[0].id
+              messageId: data[0].id,
+              features
             })
           }
         );
@@ -341,6 +664,12 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
         }
         
         const result = await response.json();
+        console.log('Room coordinator result:', result);
+        
+        // Update responding personas
+        if (result.respondingPersonas && result.respondingPersonas.length > 0) {
+          setRespondingPersonas(result.respondingPersonas);
+        }
         
         // Set a timeout to clear coordinator thinking if no responses come
         coordinatorTimeoutRef.current = setTimeout(() => {
@@ -368,6 +697,7 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
       }
     } finally {
       setIsLoading(false);
+      setIsGeneratingImage(false);
     }
   };
 
@@ -401,6 +731,76 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
     }
   };
 
+  // Handle message copying
+  const handleCopyMessage = async (messageId: string, content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch (err) {
+      console.error('Error copying message:', err);
+    }
+  };
+
+  // Toggle audio playback
+  const toggleAudio = () => {
+    setAudioEnabled(!audioEnabled);
+  };
+
+  // Generate PDF from message content
+  const handleGeneratePdf = (content: string) => {
+    const sections = extractDocumentSections(content);
+    const pdfDataUrl = generatePDFReport(
+      'Generated Report',
+      sections,
+      { date: new Date().toLocaleDateString() }
+    );
+    setPdfData(pdfDataUrl);
+    setShowPdf(true);
+  };
+
+  // Download generated image
+  const handleDownloadImage = async (messageId: string, content: string) => {
+    try {
+      // Extract image URL
+      const match = content.match(/!\[.*?\]\((.*?)\)/);
+      if (!match || !match[1]) {
+        throw new Error('No image URL found in message');
+      }
+      
+      const imageUrl = match[1];
+      
+      // Fetch the image
+      const response = await fetch(imageUrl, {
+        mode: 'cors',
+        headers: { 'Accept': 'image/*' }
+      });
+      
+      if (!response.ok && response.status !== 0) {
+        throw new Error(`Failed to fetch image: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      // Create download link
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `space-image-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
+    } catch (err) {
+      console.error('Error downloading image:', err);
+      setError('Failed to download image. Please try again.');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full relative">
       <div 
@@ -425,11 +825,6 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
         ) : (
           <>
             {messages.map((message, index) => {
-              // Find sender information
-              const sender = message.personaId 
-                ? space.members.find(m => m.personaId === message.personaId)?.personas
-                : space.members.find(m => m.userId === message.userId)?.profiles;
-              
               // Determine if this is a consecutive message from the same sender
               const isConsecutive = index > 0 && 
                 ((message.personaId && message.personaId === messages[index - 1].personaId) ||
@@ -481,6 +876,135 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
                     <div className="prose prose-sm max-w-none">
                       <Markdown content={message.content} />
                     </div>
+                    
+                    {/* Message actions */}
+                    <div className="flex items-center justify-end space-x-2 mt-2 text-xs text-gray-400">
+                      {/* Copy button */}
+                      <button
+                        onClick={() => handleCopyMessage(message.id, message.content)}
+                        className="hover:text-gray-600 transition-colors p-1.5 rounded hover:bg-gray-100"
+                        title="Copy message"
+                      >
+                        {copiedMessageId === message.id ? (
+                          <Check size={14} className="text-green-500" />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
+                      
+                      {/* Show PDF button (for document-like messages) */}
+                      {message.isPersona && isPDFRequest(message.content) && (
+                        <button
+                          onClick={() => handleGeneratePdf(message.content)}
+                          className="hover:text-gray-600 transition-colors p-1.5 rounded hover:bg-gray-100"
+                          title="View as PDF"
+                        >
+                          <FileText size={14} />
+                        </button>
+                      )}
+                      
+                      {/* Show spreadsheet button (for CSV data) */}
+                      {message.isPersona && message.content.includes("```csv") && (
+                        <button
+                          onClick={() => {
+                            const match = message.content.match(/```csv\s*([\s\S]*?)\s*```/);
+                            if (match && match[1]) {
+                              setCsvData(match[1]);
+                              setShowSpreadsheet(true);
+                            }
+                          }}
+                          className="hover:text-gray-600 transition-colors p-1.5 rounded hover:bg-gray-100"
+                          title="View as spreadsheet"
+                        >
+                          <Table size={14} />
+                        </button>
+                      )}
+                      
+                      {/* Download image button */}
+                      {message.content.includes("![") && message.content.includes("](http") && (
+                        <button
+                          onClick={() => handleDownloadImage(message.id, message.content)}
+                          className="hover:text-gray-600 transition-colors p-1.5 rounded hover:bg-gray-100"
+                          title="Download image"
+                        >
+                          <Download size={14} />
+                        </button>
+                      )}
+                      
+                      {/* Audio toggle (future use) */}
+                      {audioEnabled && message.isPersona && (
+                        <button
+                          className="hover:text-gray-600 transition-colors p-1.5 rounded hover:bg-gray-100"
+                          title="Listen to message"
+                        >
+                          <Volume2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                    
+                    {/* Interactive elements */}
+                    {message.isPersona && interactiveElements.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        {interactiveElements.filter(el => el.type === 'checklist').length > 0 && (
+                          <div className="space-y-1.5">
+                            {interactiveElements
+                              .filter(el => el.type === 'checklist')
+                              .map((item, index) => (
+                                <div 
+                                  key={`checklist-${index}`}
+                                  className={`flex items-center gap-2 p-1.5 rounded-md cursor-pointer hover:bg-gray-100 transition-colors ${
+                                    checkedItems.includes(item.text) ? 'text-green-600' : 'text-gray-700'
+                                  }`}
+                                  onClick={() => handleInteractiveElementClick(item)}
+                                >
+                                  <div className="w-4 h-4 flex items-center justify-center border rounded border-gray-400">
+                                    {checkedItems.includes(item.text) && <Check size={12} />}
+                                  </div>
+                                  <span className={checkedItems.includes(item.text) ? 'line-through' : ''}>
+                                    {item.text}
+                                  </span>
+                                </div>
+                              ))
+                            }
+                          </div>
+                        )}
+                        
+                        {interactiveElements.filter(el => el.type === 'keyword').length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {interactiveElements
+                              .filter(el => el.type === 'keyword')
+                              .map((item, index) => (
+                                <span
+                                  key={`keyword-${index}`}
+                                  className="inline-block border-b border-dotted border-blue-500 text-blue-600 cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded"
+                                  onClick={() => handleInteractiveElementClick(item)}
+                                >
+                                  {item.text}
+                                </span>
+                              ))
+                            }
+                          </div>
+                        )}
+                        
+                        {interactiveElements.filter(el => el.type === 'button').length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {interactiveElements
+                              .filter(el => el.type === 'button')
+                              .map((item, index) => (
+                                <button
+                                  key={`button-${index}`}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-sm font-medium transition-colors"
+                                  onClick={() => handleInteractiveElementClick(item)}
+                                >
+                                  {item.text}
+                                  <ChevronRight size={14} />
+                                </button>
+                              ))
+                            }
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -558,6 +1082,36 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
           <span className="text-sm">{error}</span>
         </div>
       )}
+      
+      {/* Image generation indicator */}
+      {isGeneratingImage && (
+        <div className="px-4 py-2 bg-blue-50 border-t border-blue-200 flex items-center gap-2 text-blue-700">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span className="text-sm">{imageGenerationProgress || 'Generating image...'}</span>
+        </div>
+      )}
+
+      {/* PDF Viewer */}
+      {showPdf && pdfData && (
+        <div className="fixed inset-0 z-50 p-4 bg-black/50 flex items-center justify-center" onClick={() => setShowPdf(false)}>
+          <div className="relative bg-white rounded-lg shadow-xl max-w-3xl max-h-[90vh] w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+            <PdfViewer data={pdfData} title="Space Document" onClose={() => setShowPdf(false)} />
+          </div>
+        </div>
+      )}
+      
+      {/* Spreadsheet Viewer */}
+      {showSpreadsheet && csvData && (
+        <div className="fixed inset-0 z-50 p-4 bg-black/50 flex items-center justify-center" onClick={() => setShowSpreadsheet(false)}>
+          <div className="relative bg-white rounded-lg shadow-xl max-w-3xl max-h-[90vh] w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+            <SpreadsheetDisplay 
+              data={csvData}
+              title="Space Data" 
+              onClose={() => setShowSpreadsheet(false)}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-3 sm:p-4 shadow-md z-10 pb-env-safe-bottom">
         <div className="relative max-w-7xl mx-auto w-full">
@@ -592,27 +1146,44 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
           )}
           
           <form onSubmit={handleSubmit} className="flex items-center gap-2 w-full">
-            <div className="flex-shrink-0 hidden sm:block">
+            <div className="flex-shrink-0 hidden xs:block">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
+                onClick={toggleAudio}
                 className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-                title="Add attachment"
+                title={audioEnabled ? "Disable audio playback" : "Enable audio playback"}
+                aria-label={audioEnabled ? "Disable audio playback" : "Enable audio playback"}
               >
-                <Plus size={20} className="text-gray-500" />
+                {audioEnabled ? (
+                  <Volume2 className="w-5 h-5 text-blue-600" />
+                ) : (
+                  <VolumeX className="w-5 h-5 text-gray-500" />
+                )}
               </Button>
             </div>
-
             <div className="relative flex-1">
               <div className="flex items-center w-full border rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 bg-white">
+                <button
+                  type="button"
+                  onClick={toggleAudio}
+                  className="pl-3 pr-1 text-gray-400 hover:text-gray-600 xs:hidden"
+                  title={audioEnabled ? "Disable audio" : "Enable audio"}
+                >
+                  {audioEnabled ? (
+                    <Volume2 className="w-5 h-5 text-blue-600" />
+                  ) : (
+                    <VolumeX className="w-5 h-5" />
+                  )}
+                </button>
                 <textarea
                   ref={textareaRef}
                   value={input}
                   onChange={handleTextareaChange}
                   onKeyDown={handleKeyDown}
                   placeholder={`Message ${space.name}...`}
-                  className="flex-1 px-4 py-3 rounded-lg border-0 focus:outline-none text-base resize-none min-h-[44px] max-h-[200px] overflow-y-auto"
+                  className="flex-1 pl-2 xs:pl-4 pr-4 py-3 rounded-lg border-0 focus:outline-none text-base resize-none min-h-[44px] max-h-[200px] overflow-y-auto"
                   disabled={isLoading}
                   rows={1}
                 />
@@ -627,13 +1198,6 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
                   >
                     {showSuggestions ? <X size={18} /> : <MessageSquareIcon size={18} />}
                   </button>
-                  <button
-                    type="button"
-                    className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600"
-                    title="Add emoji"
-                  >
-                    <Smile size={18} />
-                  </button>
                 </div>
               </div>
             </div>
@@ -647,10 +1211,7 @@ const SpaceChat: React.FC<SpaceChatProps> = ({ space, currentUserId, personas })
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <>
-                    <Send className="w-5 h-5" />
-                    {!isMobile && <span className="ml-2">Send</span>}
-                  </>
+                  <Send className="w-5 h-5" />
                 )}
               </Button>
             </div>

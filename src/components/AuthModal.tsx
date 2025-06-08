@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { X, Loader2, Mail, Chrome, AlertCircle } from 'lucide-react';
+import { X, Loader2, Mail, Chrome, AlertCircle, Check } from 'lucide-react';
 import Button from './ui/Button';
 import { signIn, signUp, resetPassword, signInWithGoogle } from '../lib/auth';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 type AuthMode = 'signin' | 'signup' | 'reset';
 
@@ -24,10 +25,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(authSchema),
   });
+
+  // Store the current path to redirect back after login
+  useEffect(() => {
+    if (isOpen) {
+      // Reset form state when modal opens
+      setError(null);
+      setSuccess(null);
+      setMode('signin');
+    }
+  }, [isOpen]);
 
   const onSubmit = async (data: any) => {
     setLoading(true);
@@ -40,6 +53,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           const { error } = await signIn(data.email, data.password);
           if (error) throw error;
           onClose();
+          // Stay on the same page after login
           break;
         }
         case 'signup': {
@@ -72,6 +86,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         console.error('Google sign-in error:', error);
         throw error;
       }
+      // Redirect happens automatically after successful OAuth sign-in
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -180,18 +195,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           </form>
 
           {error && error.includes('Google') && (
-            <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
-              <div className="flex items-start">
-                <AlertCircle size={16} className="mt-0.5 text-yellow-600 mr-2" />
-                <div>
-                  <p className="text-sm text-yellow-700">
-                    Google sign-in may not work properly if you're using an incognito window or have strict privacy settings.
-                  </p>
-                  <p className="text-sm text-yellow-700 mt-1">
-                    Try using a regular browser window or temporarily disable tracking prevention.
-                  </p>
-                </div>
-              </div>
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm flex items-center gap-2">
+              <AlertCircle size={16} />
+              <p>
+                Google sign-in may not work properly if you're using an incognito window or have strict privacy settings.
+              </p>
             </div>
           )}
 

@@ -9,7 +9,7 @@ The Persona API allows you to programmatically create, manage, and interact with
 All API requests should be made to:
 
 ```
-https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1
+https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1/api
 ```
 
 ## Authentication
@@ -359,7 +359,7 @@ The API returns standard HTTP status codes to indicate the success or failure of
 ```javascript
 // List all personas
 const fetchPersonas = async () => {
-  const response = await fetch('https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1/personas', {
+  const response = await fetch('https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1/api/personas', {
     headers: {
       'Authorization': `Bearer ${API_KEY}`,
     }
@@ -375,7 +375,7 @@ const fetchPersonas = async () => {
 
 // Chat with a persona
 const chatWithPersona = async (personaId, messages) => {
-  const response = await fetch(`https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1/personas/${personaId}/chat`, {
+  const response = await fetch(`https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1/api/personas/${personaId}/chat`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${API_KEY}`,
@@ -399,7 +399,7 @@ const chatWithPersona = async (personaId, messages) => {
 import requests
 
 API_KEY = 'your_api_key'
-BASE_URL = 'https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1'
+BASE_URL = 'https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1/api'
 
 # List all personas
 def fetch_personas():
@@ -430,11 +430,11 @@ def chat_with_persona(persona_id, messages):
 
 ```bash
 # List all personas
-curl 'https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1/personas' \
+curl 'https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1/api/personas' \
   -H 'Authorization: Bearer YOUR_API_KEY'
 
 # Chat with a persona
-curl 'https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1/personas/YOUR_PERSONA_ID/chat' \
+curl 'https://vveuiuwsmndxmrmupnqj.supabase.co/functions/v1/api/personas/YOUR_PERSONA_ID/chat' \
   -H 'Authorization: Bearer YOUR_API_KEY' \
   -H 'Content-Type: application/json' \
   -d '{"messages":[{"role":"user","content":"Hello, can you help me with a JavaScript question?"}]}'

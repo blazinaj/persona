@@ -151,6 +151,9 @@ export type Space = {
   isPublic: boolean;
   coordinatorInstructions?: string;
   members: SpaceMember[];
+  inviteCode?: string;
+  inviteCodeEnabled?: boolean;
+  inviteCodeExpiresAt?: Date;
 };
 
 export type SpaceMember = {
@@ -212,4 +215,37 @@ export interface PDFDocument {
 export interface EncryptionSettings {
   enabled: boolean;
   keyHash?: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  display_name?: string;
+  avatar_url?: string;
+  bio?: string;
+  is_public?: boolean;
+  onboarding_completed?: boolean;
+  role?: string;
+  primary_intention?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SpaceInvitation {
+  id: string;
+  spaceId: string;
+  spaceName: string;
+  role: 'admin' | 'member';
+  createdAt: Date;
+  expiresAt?: Date;
+  createdByName?: string;
+}
+
+export interface ApiEndpoint {
+  path: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  description: string;
+  requiresAuth: boolean;
+  requestBody?: object;
+  responseBody: object;
 }

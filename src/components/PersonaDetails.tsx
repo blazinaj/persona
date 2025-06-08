@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Star, StarOff, Eye, MessageSquare, Code, Info, Share2, Copy, Check, Book, MoreHorizontal, Menu, X, List, Edit, Trash, BrainCircuit } from 'lucide-react';
+import { ArrowLeft, Star, StarOff, Eye, MessageSquare, Code, Info, Share2, Copy, Check, Book, MoreHorizontal, Menu, X, List, Edit, Trash, BrainCircuit, Settings, FileText, Sparkles, Loader2 } from 'lucide-react';
 import { Persona } from '../types';
 import { supabase } from '../lib/supabase';
 import { AuthContext } from '../lib/AuthContext';
@@ -34,7 +34,7 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
   const { id } = useParams<{ id: string }>();
   const [isFavorited, setIsFavorited] = useState(false);
   const [viewCount, setViewCount] = useState(0);
-  const [activePanel, setActivePanel] = useState<'details' | 'integrations' | 'knowledge' | 'functions' | 'conversations' | 'memories' | null>(null);
+  const [activePanel, setActivePanel] = useState<'details' | 'integrations' | 'knowledge' | 'functions' | 'conversations' | 'memories' | 'instructions' | null>(null);
   const [functions, setFunctions] = useState<any[]>([]);
   const [isAddingFunction, setIsAddingFunction] = useState(false);
   const [editingFunction, setEditingFunction] = useState<any>(null);
@@ -51,6 +51,10 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [customInstructions, setCustomInstructions] = useState<string>('');
+  const [isSavingInstructions, setIsSavingInstructions] = useState(false);
+  const [generatedInstructions, setGeneratedInstructions] = useState<string | null>(null);
+  const [isGeneratingInstructions, setIsGeneratingInstructions] = useState(false);
   const maxRetries = 3;
 
   const persona = personas.find(p => p.id === id);
@@ -69,8 +73,97 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
       fetchStats();
       checkIfFavorited();
       fetchConversations();
+      fetchPersonaInstructions();
     }
   }, [id, user?.id]);
+
+  const fetchPersonaInstructions = async () => {
+    if (!persona?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('personas')
+        .select('instructions')
+        .eq('id', persona.id)
+        .single();
+        
+      if (error) throw error;
+      
+      if (data) {
+        setCustomInstructions(data.instructions || '');
+      }
+    } catch (error) {
+      console.error('Error fetching persona instructions:', error);
+    }
+  };
+
+  const savePersonaInstructions = async () => {
+    if (!persona?.id) return;
+    
+    try {
+      setIsSavingInstructions(true);
+      
+      const { error } = await supabase
+        .from('personas')
+        .update({ instructions: customInstructions })
+        .eq('id', persona.id);
+        
+      if (error) throw error;
+      
+    } catch (error) {
+      console.error('Error saving persona instructions:', error);
+    } finally {
+      setIsSavingInstructions(false);
+      setActivePanel(null);
+    }
+  };
+  
+  const generateInstructions = async () => {
+    if (!persona) return;
+    
+    setIsGeneratingInstructions(true);
+    setGeneratedInstructions(null);
+    
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-persona-instructions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({
+            personaId: persona.id,
+            personaName: persona.name,
+            personaDescription: persona.description,
+            personality: persona.personality,
+            knowledge: persona.knowledge,
+            tone: persona.tone,
+            existingInstructions: customInstructions || undefined
+          })
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Error: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      setGeneratedInstructions(data.instructions);
+    } catch (error) {
+      console.error('Error generating instructions:', error);
+    } finally {
+      setIsGeneratingInstructions(false);
+    }
+  };
+  
+  const applyGeneratedInstructions = () => {
+    if (generatedInstructions) {
+      setCustomInstructions(generatedInstructions);
+      setGeneratedInstructions(null);
+    }
+  };
 
   const fetchConversations = async () => {
     try {
@@ -310,29 +403,19 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
   };
 
   const handleToggleFavorite = async () => {
-    if (!user?.id || !id) return;
+    if (!user?.id || !id) {
+      navigate('/login');
+      return;
+    }
 
     try {
-      if (isFavorited) {
-        const { error } = await supabase
-          .from('persona_favorites')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('persona_id', id);
+      const { error } = await supabase
+        .rpc('toggle_persona_favorite', {
+          persona_id_input: id
+        });
 
-        if (error) throw error;
-        setIsFavorited(false);
-      } else {
-        const { error } = await supabase
-          .from('persona_favorites')
-          .insert({
-            user_id: user.id,
-            persona_id: id
-          });
-
-        if (error) throw error;
-        setIsFavorited(true);
-      }
+      if (error) throw error;
+      setIsFavorited(!isFavorited);
     } catch (error) {
       console.error('Error toggling favorite:', error);
     }
@@ -361,7 +444,7 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
     if (!user?.id || !id) return;
 
     try {
-      // Use the RPC function instead of direct upsert
+      // Use the RPC function to track views
       const { data, error } = await supabase
         .rpc('track_persona_view', {
           persona_id_input: id,
@@ -426,7 +509,19 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
-            <div className="hidden md:flex items-center gap-1 md:gap-2">
+            <div className="hidden md:flex items-center gap-3 text-sm text-gray-600">
+              <div className="flex items-center gap-1">
+                <Eye size={14} />
+                <span>{viewCount} views</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <MessageSquare size={14} />
+                <span>{persona.visibility}</span>
+              </div>
+            </div>
+            
+            {/* Desktop actions */}
+            <div className="hidden md:flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -450,6 +545,14 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
                 onClick={() => setActivePanel(activePanel === 'memories' ? null : 'memories')}
               >
                 Memories
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<FileText size={16} />}
+                onClick={() => setActivePanel(activePanel === 'instructions' ? null : 'instructions')}
+              >
+                Instructions
               </Button>
               <Button
                 variant="outline"
@@ -494,15 +597,16 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
                   )}
                 </div>
               )}
-              <Button variant="outline" size="sm" leftIcon={<Edit size={16} />} onClick={() => onEdit(persona.id)}>Edit</Button>
-              <Button variant="outline" size="sm" leftIcon={<Copy size={16} />} onClick={() => onDuplicate(persona.id)}>
-                <span className="hidden lg:inline">Duplicate</span>
-                <span className="lg:hidden">Copy</span>
-              </Button>
-              <Button variant="outline" size="sm" leftIcon={<Trash size={16} />} onClick={() => onDelete(persona.id)} className="text-red-600">
-                <span className="hidden lg:inline">Delete</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleToggleFavorite}
+                leftIcon={isFavorited ? <Star size={16} className="text-amber-500" /> : <StarOff size={16} />}
+              >
+                {isFavorited ? 'Favorited' : 'Add to Favorites'}
               </Button>
             </div>
+            
             {/* Mobile menu button */}
             <button
               onClick={() => setShowMobileMenu(!showMobileMenu)}
@@ -520,15 +624,15 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                leftIcon={<Info size={16} />}
+                leftIcon={<List size={16} />}
                 onClick={() => {
-                  setActivePanel(activePanel === 'details' ? null : 'details');
+                  setActivePanel(activePanel === 'conversations' ? null : 'conversations');
                   setShowMobileMenu(false);
                   setShowMobileSidebar(true);
                 }}
                 fullWidth
               >
-                Details
+                Conversations
               </Button>
               <Button
                 variant="outline"
@@ -559,15 +663,28 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                leftIcon={<List size={16} />}
+                leftIcon={<FileText size={16} />}
                 onClick={() => {
-                  setActivePanel(activePanel === 'conversations' ? null : 'conversations');
+                  setActivePanel(activePanel === 'instructions' ? null : 'instructions');
                   setShowMobileMenu(false);
                   setShowMobileSidebar(true);
                 }}
                 fullWidth
               >
-                Conversations
+                Instructions
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Info size={16} />}
+                onClick={() => {
+                  setActivePanel(activePanel === 'details' ? null : 'details');
+                  setShowMobileMenu(false);
+                  setShowMobileSidebar(true);
+                }}
+                fullWidth
+              >
+                Details
               </Button>
               <Button
                 variant="outline"
@@ -581,30 +698,6 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
                 fullWidth
               >
                 Functions
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<Edit size={16} />}
-                onClick={() => {
-                  onEdit(persona.id);
-                  setShowMobileMenu(false);
-                }}
-                fullWidth
-              >
-                Edit
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<Copy size={16} />}
-                onClick={() => {
-                  onDuplicate(persona.id);
-                  setShowMobileMenu(false);
-                }}
-                fullWidth
-              >
-                Duplicate
               </Button>
               {persona.visibility === 'public' && (
                 <Button
@@ -637,12 +730,49 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
               <Button
                 variant="outline"
                 size="sm"
+                leftIcon={isFavorited ? <Star size={16} className="text-amber-500" /> : <StarOff size={16} />}
+                onClick={() => {
+                  handleToggleFavorite();
+                  setShowMobileMenu(false);
+                }}
+                className="col-span-2"
+                fullWidth
+              >
+                {isFavorited ? 'Favorited' : 'Add to Favorites'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Edit size={16} />}
+                onClick={() => {
+                  onEdit(persona.id);
+                  setShowMobileMenu(false);
+                }}
+                fullWidth
+              >
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Copy size={16} />}
+                onClick={() => {
+                  onDuplicate(persona.id);
+                  setShowMobileMenu(false);
+                }}
+                fullWidth
+              >
+                Duplicate
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 leftIcon={<Trash size={16} />}
                 onClick={() => {
                   onDelete(persona.id);
                   setShowMobileMenu(false);
                 }}
-                className="text-red-600 col-span-2"
+                className="text-red-600"
                 fullWidth
               >
                 Delete
@@ -679,7 +809,7 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
 
         {activePanel === 'details' && (
           <div className={`fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom ${showMobileSidebar ? 'h-[80vh]' : 'h-0'} md:h-auto z-20 transition-all duration-300`}>
-            <DetailsPanel
+            <DetailsPanel 
               persona={persona}
               onClose={() => {
                 setActivePanel(null);
@@ -692,7 +822,7 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
         {/* Knowledge sidebar */}
         {activePanel === 'knowledge' && (
           <div className={`fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom ${showMobileSidebar ? 'h-[80vh]' : 'h-0'} md:h-auto z-20 transition-all duration-300`}>
-            <KnowledgePanel
+            <KnowledgePanel 
               personaId={persona.id}
               onClose={() => {
                 setActivePanel(null);
@@ -712,6 +842,113 @@ export const PersonaDetails: React.FC<PersonaDetailsProps> = ({
                 setShowMobileSidebar(false);
               }}
             />
+          </div>
+        )}
+
+        {/* Instructions sidebar */}
+        {activePanel === 'instructions' && (
+          <div className={`fixed inset-x-0 bottom-0 md:static md:w-96 bg-white border-t md:border md:rounded-lg md:border-gray-200 md:shadow-sm overflow-hidden safe-bottom ${showMobileSidebar ? 'h-[80vh]' : 'h-0'} md:h-auto z-20 transition-all duration-300`}>
+            <div className="flex flex-col h-full">
+              <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200">
+                <h2 className="font-semibold text-gray-900">Custom Instructions</h2>
+                <button
+                  onClick={() => {
+                    setActivePanel(null);
+                    setShowMobileSidebar(false);
+                  }}
+                  className="p-1.5 hover:bg-gray-100 rounded-full"
+                >
+                  <span className="sr-only">Close panel</span>
+                  <X size={18} className="text-gray-500" />
+                </button>
+              </div>
+              
+              <div className="p-4 flex-1 overflow-y-auto">
+                <div className="mb-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                  <div className="flex items-start gap-2">
+                    <Settings size={18} className="text-blue-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm text-blue-800">
+                        Custom instructions guide how the AI responds in conversations. Use them to:
+                      </p>
+                      <ul className="mt-2 space-y-1 list-disc list-inside text-sm text-blue-700">
+                        <li>Specify preferred response formats</li>
+                        <li>Define areas to avoid or focus on</li>
+                        <li>Set personality traits not covered by the basic settings</li>
+                        <li>Provide context about expected users or usage</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Instructions
+                    <span className="text-gray-400 text-xs ml-1 float-right">
+                      {customInstructions?.length || 0} characters
+                    </span>
+                  </label>
+                  <textarea
+                    value={customInstructions || ''}
+                    onChange={(e) => setCustomInstructions(e.target.value)}
+                    rows={12}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    placeholder="Add specific instructions for how the AI should behave, respond, or handle certain topics. These will be added to the system prompt."
+                  ></textarea>
+                  
+                  <div className="flex justify-end">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      leftIcon={isGeneratingInstructions ? <Loader2 className="animate-spin" /> : <Sparkles />}
+                      onClick={generateInstructions}
+                      disabled={isGeneratingInstructions}
+                      className="mr-2"
+                    >
+                      {isGeneratingInstructions ? 'Generating...' : 'Generate with AI'}
+                    </Button>
+                  </div>
+                  
+                  {generatedInstructions && (
+                    <div className="mt-3 bg-blue-50 border border-blue-100 rounded-lg p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="text-blue-600" size={16} />
+                          <span className="font-medium text-blue-800">AI-Generated Instructions</span>
+                        </div>
+                        <button
+                          onClick={() => setGeneratedInstructions(null)}
+                          className="text-gray-400 hover:text-gray-500"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap text-gray-700">{generatedInstructions}</p>
+                      <div className="pt-2 flex justify-end">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={applyGeneratedInstructions}
+                        >
+                          Use These Instructions
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="pt-2 flex justify-end">
+                    <Button
+                      variant="primary"
+                      onClick={savePersonaInstructions}
+                      loading={isSavingInstructions}
+                      disabled={isSavingInstructions}
+                    >
+                      {isSavingInstructions ? 'Saving...' : 'Save Instructions'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

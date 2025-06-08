@@ -1,11 +1,12 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Mail, Lock, Loader2, ArrowRight, Chrome, AlertCircle, Check } from 'lucide-react';
 import Button from '../components/ui/Button';
 import { signIn, signUp, signInWithGoogle } from '../lib/auth';
+import { supabase } from '../lib/supabase';
 
 const authSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -19,10 +20,36 @@ const Login = () => {
   const [success, setSuccess] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(authSchema),
   });
+  
+  useEffect(() => {
+    // Check if the user is already logged in
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // User is logged in, redirect to home or intended page
+        const intendedPath = new URLSearchParams(location.search).get('redirect') || '/';
+        navigate(intendedPath);
+      }
+    };
+    
+    checkAuth();
+  }, [navigate, location]);
+
+  // Handle URL parameters for auth error messages
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const errorMsg = params.get('error');
+    const errorDescription = params.get('error_description');
+    
+    if (errorMsg) {
+      setError(`Authentication error: ${errorDescription || errorMsg}`);
+    }
+  }, [location]);
 
   const onSubmit = async (data: any) => {
     setLoading(true);
@@ -33,7 +60,10 @@ const Login = () => {
       if (mode === 'signin') {
         const { error } = await signIn(data.email, data.password);
         if (error) throw error;
-        navigate('/');
+        
+        // Get intended redirect path from URL parameters, or default to home
+        const intendedPath = new URLSearchParams(location.search).get('redirect') || '/';
+        navigate(intendedPath);
       } else {
         const { error } = await signUp(data.email, data.password);
         if (error) throw error;
@@ -58,6 +88,7 @@ const Login = () => {
         console.error('Google sign-in error:', error);
         throw error;
       }
+      // Redirect happens automatically after successful OAuth sign-in
     } catch (err: any) {
       setError(err.message);
     } finally {

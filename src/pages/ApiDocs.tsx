@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Search, Code, Play, Copy, Check, ChevronRight, Sun, Moon, AlertCircle, Loader2, Key, Info, Bot, FileText, X } from 'lucide-react';
+import { Search, Code, Play, Copy, Check, ChevronRight, Sun, Moon, AlertCircle, Loader2, Key, Info, Bot, FileText, X, Terminal } from 'lucide-react';
 import { AuthContext } from '../lib/AuthContext';
 import Button from '../components/ui/Button';
 import { Markdown } from '../components/ui/Markdown';
@@ -44,7 +44,19 @@ const endpoints: Endpoint[] = [
             id: '123e4567-e89b-12d3-a456-426614174000',
             name: 'Technical Expert',
             description: 'A knowledgeable technical assistant',
-            // ... other fields
+            avatar: 'https://example.com/avatar.jpg',
+            created_at: '2025-05-15T12:00:00Z',
+            updated_at: '2025-05-15T12:00:00Z',
+            tags: ['technical', 'programming', 'support'],
+            personality: ['professional', 'analytical'],
+            knowledge: ['JavaScript', 'Python', 'React', 'Node.js'],
+            tone: 'professional',
+            examples: [
+              'How would I implement a linked list in JavaScript?',
+              'Can you explain the concept of dependency injection?'
+            ],
+            visibility: 'public',
+            user_id: 'user-id'
           }
         ]
       }
@@ -63,7 +75,20 @@ const endpoints: Endpoint[] = [
         example: {
           id: '123e4567-e89b-12d3-a456-426614174000',
           name: 'Technical Expert',
-          description: 'A knowledgeable technical assistant'
+          description: 'A knowledgeable technical assistant',
+          avatar: 'https://example.com/avatar.jpg',
+          created_at: '2025-05-15T12:00:00Z',
+          updated_at: '2025-05-15T12:00:00Z',
+          tags: ['technical', 'programming', 'support'],
+          personality: ['professional', 'analytical'],
+          knowledge: ['JavaScript', 'Python', 'React', 'Node.js'],
+          tone: 'professional',
+          examples: [
+            'How would I implement a linked list in JavaScript?',
+            'Can you explain the concept of dependency injection?'
+          ],
+          visibility: 'public',
+          user_id: 'user-id'
         }
       }
     }
@@ -87,43 +112,55 @@ const endpoints: Endpoint[] = [
           type: 'string',
           description: 'Description of the persona'
         },
+        avatar: {
+          type: 'string',
+          description: 'URL to avatar image'
+        },
+        tags: {
+          type: 'array',
+          description: 'Categorization tags'
+        },
         personality: {
           type: 'array',
-          description: 'List of personality traits'
+          description: 'Personality traits'
+        },
+        knowledge: {
+          type: 'array',
+          description: 'Knowledge areas'
+        },
+        tone: {
+          type: 'string',
+          description: 'Communication tone'
+        },
+        examples: {
+          type: 'array',
+          description: 'Example interactions'
+        },
+        instructions: {
+          type: 'string',
+          description: 'Custom instructions'
+        },
+        visibility: {
+          type: 'string',
+          description: 'Visibility setting (private, unlisted, public)'
+        },
+        voice: {
+          type: 'object',
+          description: 'Voice settings for text-to-speech'
         }
       }
     },
     responses: {
-      '200': {
+      '201': {
         description: 'Persona created successfully',
         example: {
-          success: true
-        }
-      }
-    }
-  },
-  {
-    id: 'chat',
-    method: 'POST',
-    path: '/personas/:id/chat',
-    title: 'Chat with Persona',
-    description: 'Send a message to chat with a specific persona.',
-    authentication: true,
-    requestBody: {
-      type: 'object',
-      properties: {
-        messages: {
-          type: 'array',
-          description: 'Array of chat messages',
-          required: true
-        }
-      }
-    },
-    responses: {
-      '200': {
-        description: 'Chat response',
-        example: {
-          message: 'Hello! How can I help you today?'
+          success: true,
+          message: 'Persona created successfully',
+          persona: {
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            name: 'Technical Expert',
+            // other persona fields...
+          }
         }
       }
     }
@@ -145,6 +182,42 @@ const endpoints: Endpoint[] = [
         description: {
           type: 'string',
           description: 'Description of the persona'
+        },
+        avatar: {
+          type: 'string',
+          description: 'URL to avatar image'
+        },
+        tags: {
+          type: 'array',
+          description: 'Categorization tags'
+        },
+        personality: {
+          type: 'array',
+          description: 'Personality traits'
+        },
+        knowledge: {
+          type: 'array',
+          description: 'Knowledge areas'
+        },
+        tone: {
+          type: 'string',
+          description: 'Communication tone'
+        },
+        examples: {
+          type: 'array',
+          description: 'Example interactions'
+        },
+        instructions: {
+          type: 'string',
+          description: 'Custom instructions'
+        },
+        visibility: {
+          type: 'string',
+          description: 'Visibility setting (private, unlisted, public)'
+        },
+        voice: {
+          type: 'object',
+          description: 'Voice settings for text-to-speech'
         }
       }
     },
@@ -152,7 +225,12 @@ const endpoints: Endpoint[] = [
       '200': {
         description: 'Persona updated successfully',
         example: {
-          success: true
+          success: true,
+          persona: {
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            name: 'Updated Technical Expert',
+            // other updated persona fields...
+          }
         }
       }
     }
@@ -172,28 +250,630 @@ const endpoints: Endpoint[] = [
         }
       }
     }
+  },
+  {
+    id: 'chat',
+    method: 'POST',
+    path: '/personas/:id/chat',
+    title: 'Chat with Persona',
+    description: 'Send a message to chat with a specific persona.',
+    authentication: true,
+    requestBody: {
+      type: 'object',
+      properties: {
+        messages: {
+          type: 'array',
+          description: 'Array of chat messages',
+          required: true
+        },
+        conversationId: {
+          type: 'string',
+          description: 'Optional ID of an existing conversation to continue'
+        }
+      }
+    },
+    responses: {
+      '200': {
+        description: 'Chat response',
+        example: {
+          message: 'Hello! I would be happy to help with your JavaScript question. What would you like to know?',
+          conversationId: '123e4567-e89b-12d3-a456-426614174000'
+        }
+      }
+    }
+  },
+  {
+    id: 'list-conversations',
+    method: 'GET',
+    path: '/conversations',
+    title: 'List Conversations',
+    description: 'Retrieve a list of conversations for the authenticated user, optionally filtered by persona.',
+    authentication: true,
+    responses: {
+      '200': {
+        description: 'List of conversations',
+        example: [
+          {
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            persona_id: '456e7890-e12b-34d5-a678-426614174000',
+            title: 'JavaScript Help',
+            created_at: '2025-05-15T12:00:00Z',
+            updated_at: '2025-05-15T12:05:00Z',
+            personas: {
+              id: '456e7890-e12b-34d5-a678-426614174000',
+              name: 'Technical Expert',
+              avatar: 'https://example.com/avatar.jpg'
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    id: 'get-knowledge',
+    method: 'GET',
+    path: '/knowledge',
+    title: 'Get Knowledge Entries',
+    description: 'Retrieve knowledge entries for a specific persona.',
+    authentication: true,
+    responses: {
+      '200': {
+        description: 'List of knowledge entries',
+        example: [
+          {
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            persona_id: '456e7890-e12b-34d5-a678-426614174000',
+            title: 'JavaScript Closures',
+            description: 'Closures are a fundamental concept in JavaScript...',
+            category: 'programming',
+            source: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures',
+            created_at: '2025-05-15T12:00:00Z',
+            updated_at: '2025-05-15T12:00:00Z',
+            user_id: 'user-id'
+          }
+        ]
+      }
+    }
+  },
+  {
+    id: 'create-knowledge',
+    method: 'POST',
+    path: '/knowledge',
+    title: 'Create Knowledge Entry',
+    description: 'Add a new knowledge entry for a persona.',
+    authentication: true,
+    requestBody: {
+      type: 'object',
+      properties: {
+        persona_id: {
+          type: 'string',
+          description: 'ID of the persona',
+          required: true
+        },
+        title: {
+          type: 'string',
+          description: 'Title of the knowledge entry',
+          required: true
+        },
+        description: {
+          type: 'string',
+          description: 'Content of the knowledge entry',
+          required: true
+        },
+        category: {
+          type: 'string',
+          description: 'Category of the knowledge entry',
+          required: true
+        },
+        source: {
+          type: 'string',
+          description: 'Source of the knowledge (URL, reference, etc.)'
+        }
+      }
+    },
+    responses: {
+      '201': {
+        description: 'Knowledge entry created successfully',
+        example: {
+          success: true,
+          entry: {
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            persona_id: '456e7890-e12b-34d5-a678-426614174000',
+            title: 'JavaScript Closures',
+            description: 'Closures are a fundamental concept in JavaScript...',
+            category: 'programming',
+            source: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures',
+            created_at: '2025-05-15T12:00:00Z',
+            updated_at: '2025-05-15T12:00:00Z',
+            user_id: 'user-id'
+          }
+        }
+      }
+    }
+  },
+  {
+    id: 'api-docs',
+    method: 'GET',
+    path: '/docs',
+    title: 'API Documentation',
+    description: 'Get programmatic API documentation.',
+    authentication: false,
+    responses: {
+      '200': {
+        description: 'API Documentation',
+        example: {
+          title: 'Persona API Reference',
+          version: '1.0.0',
+          baseUrl: 'https://example.com/functions/v1/api',
+          auth: {
+            type: 'Bearer',
+            description: 'API requests require an API key in the Authorization header.',
+            example: 'Authorization: Bearer YOUR_API_KEY'
+          },
+          endpoints: [
+            // List of endpoints...
+          ]
+        }
+      }
+    }
   }
 ];
 
+// Get the base URL from environment variables with fallback
+const getSupabaseUrl = () => {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  if (!url) {
+    console.error('VITE_SUPABASE_URL environment variable is not set');
+    return '';
+  }
+  return url;
+};
+
 const codeExamples: Record<string, Record<string, string>> = {
   'list-personas': {
-    javascript: `const response = await fetch('${import.meta.env.VITE_SUPABASE_URL}/functions/v1/personas', {
-  headers: {
-    'Authorization': \`Bearer \${SUPABASE_ANON_KEY}\`,
+    javascript: `const fetchPersonas = async (apiKey) => {
+  const response = await fetch('${getSupabaseUrl()}/functions/v1/api/personas', {
+    headers: {
+      'Authorization': \`Bearer \${apiKey}\`,
+    }
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch personas');
   }
-});
-
-const personas = await response.json();`,
+  
+  return await response.json();
+};`,
     python: `import requests
 
-response = requests.get(
-    '${import.meta.env.VITE_SUPABASE_URL}/functions/v1/personas',
-    headers={'Authorization': f'Bearer {SUPABASE_ANON_KEY}'}
-)
+def fetch_personas(api_key):
+    response = requests.get(
+        '${getSupabaseUrl()}/functions/v1/api/personas',
+        headers={'Authorization': f'Bearer {api_key}'}
+    )
+    
+    response.raise_for_status()
+    return response.json()`,
+    curl: `curl '${getSupabaseUrl()}/functions/v1/api/personas' \\
+  -H 'Authorization: Bearer YOUR_API_KEY'`
+  },
+  'get-persona': {
+    javascript: `const fetchPersona = async (apiKey, personaId) => {
+  const response = await fetch(\`${getSupabaseUrl()}/functions/v1/api/personas/\${personaId}\`, {
+    headers: {
+      'Authorization': \`Bearer \${apiKey}\`,
+    }
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch persona');
+  }
+  
+  return await response.json();
+};`,
+    python: `import requests
 
-personas = response.json()`,
-    curl: `curl '${import.meta.env.VITE_SUPABASE_URL}/functions/v1/personas' \\
-  -H 'Authorization: Bearer $SUPABASE_ANON_KEY'`
+def fetch_persona(api_key, persona_id):
+    response = requests.get(
+        f'${getSupabaseUrl()}/functions/v1/api/personas/{persona_id}',
+        headers={'Authorization': f'Bearer {api_key}'}
+    )
+    
+    response.raise_for_status()
+    return response.json()`,
+    curl: `curl '${getSupabaseUrl()}/functions/v1/api/personas/YOUR_PERSONA_ID' \\
+  -H 'Authorization: Bearer YOUR_API_KEY'`
+  },
+  'create-persona': {
+    javascript: `const createPersona = async (apiKey, personaData) => {
+  const response = await fetch('${getSupabaseUrl()}/functions/v1/api/personas', {
+    method: 'POST',
+    headers: {
+      'Authorization': \`Bearer \${apiKey}\`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(personaData)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to create persona');
+  }
+  
+  return await response.json();
+};
+
+// Example usage:
+const newPersona = {
+  name: 'Technical Writer',
+  description: 'Helps with documentation and technical writing',
+  tags: ['writing', 'documentation'],
+  personality: ['professional', 'analytical'],
+  knowledge: ['technical writing', 'documentation', 'markdown'],
+  tone: 'professional',
+  visibility: 'private'
+};`,
+    python: `import requests
+
+def create_persona(api_key, persona_data):
+    response = requests.post(
+        '${getSupabaseUrl()}/functions/v1/api/personas',
+        headers={
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        },
+        json=persona_data
+    )
+    
+    response.raise_for_status()
+    return response.json()
+
+# Example usage:
+new_persona = {
+    "name": "Technical Writer",
+    "description": "Helps with documentation and technical writing",
+    "tags": ["writing", "documentation"],
+    "personality": ["professional", "analytical"],
+    "knowledge": ["technical writing", "documentation", "markdown"],
+    "tone": "professional",
+    "visibility": "private"
+}`,
+    curl: `curl -X POST '${getSupabaseUrl()}/functions/v1/api/personas' \\
+  -H 'Authorization: Bearer YOUR_API_KEY' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "name": "Technical Writer",
+    "description": "Helps with documentation and technical writing",
+    "tags": ["writing", "documentation"],
+    "personality": ["professional", "analytical"],
+    "knowledge": ["technical writing", "documentation", "markdown"],
+    "tone": "professional",
+    "visibility": "private"
+  }'`
+  },
+  'update-persona': {
+    javascript: `const updatePersona = async (apiKey, personaId, updateData) => {
+  const response = await fetch(\`${getSupabaseUrl()}/functions/v1/api/personas/\${personaId}\`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': \`Bearer \${apiKey}\`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(updateData)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to update persona');
+  }
+  
+  return await response.json();
+};
+
+// Example usage:
+const updates = {
+  name: 'Updated Technical Writer',
+  description: 'Expert in technical documentation',
+  visibility: 'unlisted'
+};`,
+    python: `import requests
+
+def update_persona(api_key, persona_id, update_data):
+    response = requests.put(
+        f'${getSupabaseUrl()}/functions/v1/api/personas/{persona_id}',
+        headers={
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        },
+        json=update_data
+    )
+    
+    response.raise_for_status()
+    return response.json()
+
+# Example usage:
+updates = {
+    "name": "Updated Technical Writer",
+    "description": "Expert in technical documentation",
+    "visibility": "unlisted"
+}`,
+    curl: `curl -X PUT '${getSupabaseUrl()}/functions/v1/api/personas/YOUR_PERSONA_ID' \\
+  -H 'Authorization: Bearer YOUR_API_KEY' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "name": "Updated Technical Writer",
+    "description": "Expert in technical documentation",
+    "visibility": "unlisted"
+  }'`
+  },
+  'delete-persona': {
+    javascript: `const deletePersona = async (apiKey, personaId) => {
+  const response = await fetch(\`${getSupabaseUrl()}/functions/v1/api/personas/\${personaId}\`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': \`Bearer \${apiKey}\`,
+    }
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to delete persona');
+  }
+  
+  return await response.json();
+};`,
+    python: `import requests
+
+def delete_persona(api_key, persona_id):
+    response = requests.delete(
+        f'${getSupabaseUrl()}/functions/v1/api/personas/{persona_id}',
+        headers={'Authorization': f'Bearer {api_key}'}
+    )
+    
+    response.raise_for_status()
+    return response.json()`,
+    curl: `curl -X DELETE '${getSupabaseUrl()}/functions/v1/api/personas/YOUR_PERSONA_ID' \\
+  -H 'Authorization: Bearer YOUR_API_KEY'`
+  },
+  'chat': {
+    javascript: `const chatWithPersona = async (apiKey, personaId, messages, conversationId = null) => {
+  const response = await fetch(\`${getSupabaseUrl()}/functions/v1/api/personas/\${personaId}/chat\`, {
+    method: 'POST',
+    headers: {
+      'Authorization': \`Bearer \${apiKey}\`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      messages,
+      conversationId
+    })
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to chat with persona');
+  }
+  
+  return await response.json();
+};
+
+// Example usage:
+const messages = [
+  { role: 'user', content: 'Hello, can you help me with a JavaScript question?' }
+];`,
+    python: `import requests
+
+def chat_with_persona(api_key, persona_id, messages, conversation_id=None):
+    payload = {
+        "messages": messages,
+    }
+    
+    if conversation_id:
+        payload["conversationId"] = conversation_id
+    
+    response = requests.post(
+        f'${getSupabaseUrl()}/functions/v1/api/personas/{persona_id}/chat',
+        headers={
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        },
+        json=payload
+    )
+    
+    response.raise_for_status()
+    return response.json()
+
+# Example usage:
+messages = [
+    {"role": "user", "content": "Hello, can you help me with a JavaScript question?"}
+]`,
+    curl: `curl -X POST '${getSupabaseUrl()}/functions/v1/api/personas/YOUR_PERSONA_ID/chat' \\
+  -H 'Authorization: Bearer YOUR_API_KEY' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Hello, can you help me with a JavaScript question?"}
+    ]
+  }'`
+  },
+  'list-conversations': {
+    javascript: `const fetchConversations = async (apiKey, personaId = null, includeMessages = false) => {
+  let url = '${getSupabaseUrl()}/functions/v1/api/conversations';
+  
+  // Add query parameters if provided
+  const params = new URLSearchParams();
+  if (personaId) {
+    params.append('persona_id', personaId);
+  }
+  if (includeMessages) {
+    params.append('include_messages', 'true');
+  }
+  
+  if (params.toString()) {
+    url += \`?\${params.toString()}\`;
+  }
+  
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': \`Bearer \${apiKey}\`,
+    }
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch conversations');
+  }
+  
+  return await response.json();
+};`,
+    python: `import requests
+
+def fetch_conversations(api_key, persona_id=None, include_messages=False):
+    url = '${getSupabaseUrl()}/functions/v1/api/conversations'
+    
+    # Add query parameters if provided
+    params = {}
+    if persona_id:
+        params['persona_id'] = persona_id
+    if include_messages:
+        params['include_messages'] = 'true'
+    
+    response = requests.get(
+        url,
+        headers={'Authorization': f'Bearer {api_key}'},
+        params=params
+    )
+    
+    response.raise_for_status()
+    return response.json()`,
+    curl: `curl '${getSupabaseUrl()}/functions/v1/api/conversations' \\
+  -H 'Authorization: Bearer YOUR_API_KEY'
+
+# With query parameters:
+curl '${getSupabaseUrl()}/functions/v1/api/conversations?persona_id=YOUR_PERSONA_ID&include_messages=true' \\
+  -H 'Authorization: Bearer YOUR_API_KEY'`
+  },
+  'get-knowledge': {
+    javascript: `const fetchKnowledgeEntries = async (apiKey, personaId) => {
+  const url = \`${getSupabaseUrl()}/functions/v1/api/knowledge?persona_id=\${personaId}\`;
+  
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': \`Bearer \${apiKey}\`,
+    }
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch knowledge entries');
+  }
+  
+  return await response.json();
+};`,
+    python: `import requests
+
+def fetch_knowledge_entries(api_key, persona_id):
+    response = requests.get(
+        f'${getSupabaseUrl()}/functions/v1/api/knowledge',
+        headers={'Authorization': f'Bearer {api_key}'},
+        params={'persona_id': persona_id}
+    )
+    
+    response.raise_for_status()
+    return response.json()`,
+    curl: `curl '${getSupabaseUrl()}/functions/v1/api/knowledge?persona_id=YOUR_PERSONA_ID' \\
+  -H 'Authorization: Bearer YOUR_API_KEY'`
+  },
+  'create-knowledge': {
+    javascript: `const createKnowledgeEntry = async (apiKey, entryData) => {
+  const response = await fetch('${getSupabaseUrl()}/functions/v1/api/knowledge', {
+    method: 'POST',
+    headers: {
+      'Authorization': \`Bearer \${apiKey}\`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(entryData)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to create knowledge entry');
+  }
+  
+  return await response.json();
+};
+
+// Example usage:
+const newEntry = {
+  persona_id: 'YOUR_PERSONA_ID',
+  title: 'JavaScript Closures',
+  description: 'Closures are a fundamental concept in JavaScript...',
+  category: 'programming',
+  source: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures'
+};`,
+    python: `import requests
+
+def create_knowledge_entry(api_key, entry_data):
+    response = requests.post(
+        '${getSupabaseUrl()}/functions/v1/api/knowledge',
+        headers={
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        },
+        json=entry_data
+    )
+    
+    response.raise_for_status()
+    return response.json()
+
+# Example usage:
+new_entry = {
+    "persona_id": "YOUR_PERSONA_ID",
+    "title": "JavaScript Closures",
+    "description": "Closures are a fundamental concept in JavaScript...",
+    "category": "programming",
+    "source": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures"
+}`,
+    curl: `curl -X POST '${getSupabaseUrl()}/functions/v1/api/knowledge' \\
+  -H 'Authorization: Bearer YOUR_API_KEY' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "persona_id": "YOUR_PERSONA_ID",
+    "title": "JavaScript Closures",
+    "description": "Closures are a fundamental concept in JavaScript...",
+    "category": "programming",
+    "source": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures"
+  }'`
+  },
+  'api-docs': {
+    javascript: `const fetchApiDocs = async (apiKey) => {
+  const response = await fetch('${getSupabaseUrl()}/functions/v1/api/docs', {
+    headers: {
+      'Authorization': \`Bearer \${apiKey}\`,
+    }
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch API documentation');
+  }
+  
+  return await response.json();
+};`,
+    python: `import requests
+
+def fetch_api_docs(api_key):
+    response = requests.get(
+        '${getSupabaseUrl()}/functions/v1/api/docs',
+        headers={'Authorization': f'Bearer {api_key}'}
+    )
+    
+    response.raise_for_status()
+    return response.json()`,
+    curl: `curl '${getSupabaseUrl()}/functions/v1/api/docs' \\
+  -H 'Authorization: Bearer YOUR_API_KEY'`
   }
 };
 
@@ -232,7 +912,38 @@ const ApiDocs: React.FC = () => {
 
   useEffect(() => {
     if (selectedEndpoint) {
-      setRequestBody(JSON.stringify(selectedEndpoint.requestBody?.properties || {}, null, 2));
+      if (selectedEndpoint.requestBody?.properties) {
+        // Create a template JSON object with all properties
+        const template: Record<string, any> = {};
+        Object.entries(selectedEndpoint.requestBody.properties).forEach(([key, prop]) => {
+          if (prop.type === 'string') {
+            template[key] = "";
+          } else if (prop.type === 'array') {
+            template[key] = [];
+          } else if (prop.type === 'object') {
+            template[key] = {};
+          } else if (prop.type === 'number') {
+            template[key] = 0;
+          } else if (prop.type === 'boolean') {
+            template[key] = false;
+          }
+          
+          // Add "REQUIRED" marker for required fields
+          if (prop.required) {
+            const comment = prop.type === 'string' ? '/* REQUIRED */' : '// REQUIRED';
+            if (prop.type === 'string') {
+              template[key] = comment;
+            } else {
+              template[`${key}${comment}`] = template[key];
+              delete template[key];
+            }
+          }
+        });
+        
+        setRequestBody(JSON.stringify(template, null, 2));
+      } else {
+        setRequestBody('');
+      }
     }
   }, [selectedEndpoint]);
 
@@ -279,105 +990,146 @@ const ApiDocs: React.FC = () => {
     setRawResponse('');
 
     try {
-      // Replace path parameters with actual values if needed
+      // Validate environment variable
+      const supabaseUrl = getSupabaseUrl();
+      if (!supabaseUrl) {
+        throw new Error('Supabase URL is not configured. Please check your environment variables.');
+      }
+
+      // Build the request details
       let path = selectedEndpoint.path;
       if (path.includes(':id')) {
         // For demo purposes, use a placeholder or the first persona ID if available
         path = path.replace(':id', 'demo-persona-id');
       }
       
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1${path}`;
-      const options: RequestInit = {
-        method: selectedEndpoint.method,
-        headers: {}
-      };
+      // Construct the complete URL using absolute path
+      const url = `${supabaseUrl}/functions/v1/api${path}`;
       
-      // Add headers
+      // Prepare headers
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Authorization': ''
+        'Content-Type': 'application/json'
       };
 
-      // Use custom key if enabled, otherwise use selected key
-      if (useCustomKey && customApiKey) {
-        headers['Authorization'] = `Bearer ${customApiKey}`;
-      } else if (selectedApiKey) {
-        headers['Authorization'] = `Bearer ${selectedApiKey}`;
+      // For authenticated endpoints, require a proper API key
+      if (selectedEndpoint.authentication) {
+        // Use custom key if enabled, otherwise use selected key
+        if (useCustomKey && customApiKey) {
+          headers['Authorization'] = `Bearer ${customApiKey}`;
+        } else if (selectedApiKey) {
+          headers['Authorization'] = `Bearer ${selectedApiKey}`;
+        } else {
+          throw new Error('This endpoint requires authentication. Please provide an API key or create one in Settings > API Keys.');
+        }
       } else {
-        // Use the anonymous key if no API key is selected or provided
+        // For non-authenticated endpoints, we can use the anonymous key if available
         const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
         if (anonKey) {
           headers['Authorization'] = `Bearer ${anonKey}`;
-        } else {
-          throw new Error('No API key provided and no anonymous key available');
         }
       }
-      
-      options.headers = headers;
 
-      if (selectedEndpoint.method !== 'GET') {
-        options.body = requestBody.trim() || '{}';
+      // Prepare request body
+      let bodyData: any = undefined;
+      if (selectedEndpoint.method !== 'GET' && requestBody.trim()) {
+        try {
+          bodyData = JSON.parse(requestBody.trim());
+        } catch (e) {
+          throw new Error('Invalid JSON in request body');
+        }
+      } else if (selectedEndpoint.method !== 'GET') {
+        bodyData = {};
       }
 
       // Store raw request information
-      setRawRequest(JSON.stringify({
+      const requestDetails = {
         url,
-        method: options.method,
+        method: selectedEndpoint.method,
         headers,
-        body: options.method !== 'GET' && options.body ? 
-          (options.body === '{}' ? {} : JSON.parse(options.body)) : undefined
-      }, null, 2));
+        body: bodyData
+      };
 
-      const response = await fetch(url, options);
-      const responseText = await response.text();
-      let responseData;
-      
+      setRawRequest(JSON.stringify(requestDetails, null, 2));
+
+      const options: RequestInit = {
+        method: selectedEndpoint.method,
+        headers,
+        ...(bodyData && { body: JSON.stringify(bodyData) })
+      };
+
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
       try {
-        responseData = JSON.parse(responseText);
-      } catch (e) {
-        responseData = { text: responseText };
-      }
-      
-      // Store raw response information
-      setRawResponse(JSON.stringify({
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries([...response.headers.entries()]),
-        body: responseData
-      }, null, 2));
-      
-      if (!response.ok) {
-        // Don't throw error here, just show the raw response
-        setRawResponse(JSON.stringify({
+        const response = await fetch(url, { 
+          ...options, 
+          signal: controller.signal 
+        });
+        clearTimeout(timeoutId);
+        
+        // Try to get response text
+        let responseText = '';
+        let responseData: any = null;
+        
+        try {
+          responseText = await response.text();
+          if (responseText) {
+            try {
+              responseData = JSON.parse(responseText);
+            } catch (e) {
+              responseData = { text: responseText };
+            }
+          } else {
+            responseData = { message: 'Empty response' };
+          }
+        } catch (e) {
+          responseData = { error: 'Failed to read response', details: e.message };
+        }
+        
+        // Store raw response information
+        const responseDetails = {
           status: response.status,
           statusText: response.statusText,
           headers: Object.fromEntries([...response.headers.entries()]),
           body: responseData
-        }, null, 2));
+        };
         
-        setError(responseData.error || `Request failed with status ${response.status}`);
-        return;
+        setRawResponse(JSON.stringify(responseDetails, null, 2));
+        
+        if (!response.ok) {
+          setError(`Request failed with status ${response.status}: ${responseData?.error || responseData?.message || 'Unknown error'}`);
+          setActiveTab('response');
+        } else {
+          setResponse(JSON.stringify(responseData, null, 2));
+          setActiveTab('formatted');
+        }
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timed out after 30 seconds. The API endpoint may not be available or is taking too long to respond.');
+        } else {
+          throw fetchError;
+        }
       }
-
-      setResponse(JSON.stringify(responseData, null, 2));
       
-      // Also set raw response
+    } catch (err: any) {
+      // Network error or other fetch failure
+      const errorDetails = {
+        error: 'Network Error',
+        message: err.message,
+        type: err.name,
+        details: 'This typically indicates a network connectivity issue, CORS problem, the endpoint is not available, or the Supabase Edge Functions are not deployed.'
+      };
+      
       setRawResponse(JSON.stringify({
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries([...response.headers.entries()]),
-        body: responseData
+        status: 'Network Error',
+        error: errorDetails
       }, null, 2));
       
-      // Switch to formatted tab on success
-      setActiveTab('formatted');
-    } catch (err: any) {
-      setError(err.message);
-      
-      // If we have a response, show it
-      if (rawResponse) {
-        setActiveTab('response');
-      }
+      setError(`Network Error: ${err.message}`);
+      setActiveTab('response');
     } finally {
       setIsLoading(false);
     }
@@ -385,9 +1137,10 @@ const ApiDocs: React.FC = () => {
 
   // Generate LLM-friendly documentation
   const generateLLMDocs = () => {
+    const supabaseUrl = getSupabaseUrl();
     let docs = `# Persona API Documentation\n\n`;
     
-    docs += `## Base URL\n\n\`\`\`\n${import.meta.env.VITE_SUPABASE_URL}/functions/v1\n\`\`\`\n\n`;
+    docs += `## Base URL\n\n\`\`\`\n${supabaseUrl}/functions/v1/api\n\`\`\`\n\n`;
     
     docs += `## Authentication\n\nAll API requests require authentication using an API key in the Authorization header:\n\n\`\`\`\nAuthorization: Bearer YOUR_API_KEY\n\`\`\`\n\n`;
     
@@ -410,6 +1163,8 @@ const ApiDocs: React.FC = () => {
             exampleBody[key] = `"example ${key}"`;
           } else if (prop.type === 'array') {
             exampleBody[key] = `["example"]`;
+          } else if (prop.type === 'object') {
+            exampleBody[key] = `{}`;
           } else {
             exampleBody[key] = `{}`;
           }
@@ -417,7 +1172,10 @@ const ApiDocs: React.FC = () => {
         docs += `${JSON.stringify(exampleBody, null, 2)}\n\`\`\`\n\n`;
       }
       
-      docs += `**Response**:\n\n\`\`\`json\n${JSON.stringify(endpoint.responses['200'].example, null, 2)}\n\`\`\`\n\n`;
+      const responseExample = endpoint.responses['200'] || endpoint.responses['201'];
+      if (responseExample) {
+        docs += `**Response**:\n\n\`\`\`json\n${JSON.stringify(responseExample.example, null, 2)}\n\`\`\`\n\n`;
+      }
       
       // Add code example for JavaScript
       if (codeExamples[endpoint.id]?.javascript) {
@@ -443,8 +1201,12 @@ const ApiDocs: React.FC = () => {
 
   const filteredEndpoints = endpoints.filter(endpoint =>
     endpoint.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    endpoint.description.toLowerCase().includes(searchTerm.toLowerCase())
+    endpoint.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    endpoint.path.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Get the current Supabase URL for display
+  const currentSupabaseUrl = getSupabaseUrl();
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
@@ -479,6 +1241,19 @@ const ApiDocs: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Environment variable check */}
+        {!currentSupabaseUrl && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2 text-red-700">
+              <AlertCircle size={16} />
+              <p className="font-medium">Configuration Error</p>
+            </div>
+            <p className="text-red-600 text-sm mt-1">
+              VITE_SUPABASE_URL environment variable is not set. API testing will not work properly.
+            </p>
+          </div>
+        )}
 
         {/* LLM-Friendly Documentation Modal */}
         {showLLMDocs && (
@@ -603,7 +1378,7 @@ const ApiDocs: React.FC = () => {
                     <code className={`mt-1 block rounded-md p-3 text-sm font-mono ${
                       isDarkMode ? 'bg-gray-900 text-gray-300' : 'bg-gray-100 text-gray-900'
                     }`}>
-                      {selectedEndpoint.path}
+                      {currentSupabaseUrl || 'SUPABASE_URL_NOT_SET'}/functions/v1/api{selectedEndpoint.path}
                     </code>
                   </div>
 
@@ -638,96 +1413,99 @@ const ApiDocs: React.FC = () => {
                     </div>
                   )}
                   
-                  <div className="mt-4">
-                    <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                      API Key
-                      <span className="ml-1 text-xs text-gray-500">(required for authentication)</span>
-                    </label>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
-                          <select
-                            value={selectedApiKey}
-                            onChange={(e) => {
-                              setSelectedApiKey(e.target.value);
-                              setUseCustomKey(false);
-                            }}
-                            className={`w-full pl-10 pr-3 py-2 appearance-none rounded-md ${
-                              isDarkMode
-                                ? 'bg-gray-900 text-gray-300 border-gray-700'
-                                : 'bg-gray-50 text-gray-900 border-gray-300'
-                            } border focus:outline-none focus:ring-2 focus:ring-blue-500 ${useCustomKey ? 'opacity-50' : ''}`}
-                            disabled={loadingKeys || useCustomKey}
-                          >
-                            <option value="">Use default anonymous key</option>
-                            {apiKeys.map(key => (
-                              <option key={key.id} value={key.key}>
-                                {key.name}
-                              </option>
-                            ))}
-                          </select>
-                          <Key size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} />
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.location.href = '/profile'}
-                        >Manage Keys</Button>
-                      </div>
-                      
-                      <div className="flex items-center">
-                        <input
-                          type="checkbox"
-                          id="use-custom-key"
-                          checked={useCustomKey}
-                          onChange={(e) => setUseCustomKey(e.target.checked)}
-                          className={`h-4 w-4 ${
-                            isDarkMode
-                              ? 'bg-gray-900 border-gray-700 text-blue-600'
-                              : 'bg-white border-gray-300 text-blue-600'
-                          } rounded focus:ring-blue-500`}
-                        />
-                        <label
-                          htmlFor="use-custom-key"
-                          className={`ml-2 block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                        >
-                          Use custom API key
-                        </label>
-                      </div>
-                      
-                      {useCustomKey && (
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Key size={16} className={isDarkMode ? 'text-gray-500' : 'text-gray-400'} />
+                  {selectedEndpoint.authentication && (
+                    <div className="mt-4">
+                      <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                        API Key
+                        <span className="ml-1 text-xs text-red-500">(required for this endpoint)</span>
+                      </label>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <select
+                              value={selectedApiKey}
+                              onChange={(e) => {
+                                setSelectedApiKey(e.target.value);
+                                setUseCustomKey(false);
+                              }}
+                              className={`w-full pl-10 pr-3 py-2 appearance-none rounded-md ${
+                                isDarkMode
+                                  ? 'bg-gray-900 text-gray-300 border-gray-700'
+                                  : 'bg-gray-50 text-gray-900 border-gray-300'
+                              } border focus:outline-none focus:ring-2 focus:ring-blue-500 ${useCustomKey ? 'opacity-50' : ''}`}
+                              disabled={loadingKeys || useCustomKey}
+                            >
+                              <option value="">Select an API key</option>
+                              {apiKeys.map(key => (
+                                <option key={key.id} value={key.key}>
+                                  {key.name}
+                                </option>
+                              ))}
+                            </select>
+                            <Key size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} />
                           </div>
-                          <input
-                            type="text"
-                            value={customApiKey}
-                            onChange={(e) => setCustomApiKey(e.target.value)}
-                            placeholder="Enter your API key"
-                            className={`w-full pl-10 pr-3 py-2 rounded-md ${
-                              isDarkMode
-                                ? 'bg-gray-900 text-gray-300 border-gray-700'
-                                : 'bg-gray-50 text-gray-900 border-gray-300'
-                            } border focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.location.href = '/settings?tab=api'}
+                          >Manage Keys</Button>
                         </div>
-                      )}
-                      
-                      <div className={`flex items-start gap-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
-                        <Info size={14} className="mt-0.5 flex-shrink-0" />
-                        <p>
-                          API keys are used to authenticate requests. You can use your own key for testing or the default anonymous key for public endpoints. If you're getting authentication errors (401 Invalid JWT), make sure to provide a valid API key or check that your anonymous key is correct.
-                        </p>
+                        
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="use-custom-key"
+                            checked={useCustomKey}
+                            onChange={(e) => setUseCustomKey(e.target.checked)}
+                            className={`h-4 w-4 ${
+                              isDarkMode
+                                ? 'bg-gray-900 border-gray-700 text-blue-600'
+                                : 'bg-white border-gray-300 text-blue-600'
+                            } rounded focus:ring-blue-500`}
+                          />
+                          <label
+                            htmlFor="use-custom-key"
+                            className={`ml-2 block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
+                          >
+                            Use custom API key
+                          </label>
+                        </div>
+                        
+                        {useCustomKey && (
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                              <Key size={16} className={isDarkMode ? 'text-gray-500' : 'text-gray-400'} />
+                            </div>
+                            <input
+                              type="text"
+                              value={customApiKey}
+                              onChange={(e) => setCustomApiKey(e.target.value)}
+                              placeholder="Enter your API key"
+                              className={`w-full pl-10 pr-3 py-2 rounded-md ${
+                                isDarkMode
+                                  ? 'bg-gray-900 text-gray-300 border-gray-700'
+                                  : 'bg-gray-50 text-gray-900 border-gray-300'
+                              } border focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                            />
+                          </div>
+                        )}
+                        
+                        <div className={`flex items-start gap-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
+                          <Info size={14} className="mt-0.5 flex-shrink-0" />
+                          <p>
+                            This endpoint requires authentication with a valid API key. You can create API keys in Settings &gt; API Keys.
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   <Button
                     variant="primary"
                     onClick={handleTestEndpoint}
-                    disabled={isLoading}
+                    disabled={isLoading || !currentSupabaseUrl || (selectedEndpoint.authentication && !selectedApiKey && !customApiKey)}
                     leftIcon={isLoading ? <Loader2 className="animate-spin" /> : <Play size={16} />}
+                    className="mt-4"
                   >
                     {isLoading ? 'Sending Request...' : 'Send Request'}
                   </Button>
@@ -774,6 +1552,7 @@ const ApiDocs: React.FC = () => {
                               ? 'border-blue-500 text-blue-600'
                               : 'border-transparent text-gray-500 hover:text-gray-700'
                           }`}
+                          disabled={!response}
                         >
                           Formatted Response
                         </button>
@@ -857,7 +1636,8 @@ const ApiDocs: React.FC = () => {
                       isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
                     }`}>
                       <code className={isDarkMode ? 'text-gray-300' : 'text-gray-900'}>
-                        {codeExamples[selectedEndpoint.id]?.[selectedLanguage]}
+                        {codeExamples[selectedEndpoint.id]?.[selectedLanguage] || 
+                         "// Code example not available for this endpoint and language combination."}
                       </code>
                     </pre>
                     <button
@@ -882,7 +1662,7 @@ const ApiDocs: React.FC = () => {
               </div>
             ) : (
               <div className={`text-center py-12 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                <Code size={48} className="mx-auto mb-4 opacity-50" />
+                <Terminal size={48} className="mx-auto mb-4 opacity-50" />
                 <h3 className={`text-lg font-medium mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                   Select an endpoint
                 </h3>
