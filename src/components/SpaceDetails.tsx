@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Settings, Info, UserPlus, Bot, User, Loader2, AlertCircle, Share2, Check, Copy, Link, BrainCircuit, X } from 'lucide-react';
+import { ArrowLeft, Users, Settings, Info, UserPlus, Bot, User, Loader2, AlertCircle, Share2, Check, Copy, Link, BrainCircuit, X, Menu, MessageSquare } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Button from './ui/Button';
 import { Space, Persona } from '../types';
@@ -25,6 +25,8 @@ const SpaceDetails: React.FC<SpaceDetailsProps> = ({ userId, onBack }) => {
   const [activePanel, setActivePanel] = useState<'members' | 'settings' | 'memories' | null>(null);
   const navigate = useNavigate();
   const [showShareTooltip, setShowShareTooltip] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -40,16 +42,23 @@ const SpaceDetails: React.FC<SpaceDetailsProps> = ({ userId, onBack }) => {
       console.log('Fetching space details for space ID:', id);
       setLoading(true);
       
-      // Fetch space details
+      // Fetch space details - use maybeSingle to handle case where space doesn't exist
       const { data: spaceData, error: spaceError } = await supabase
         .from('spaces')
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
         
       if (spaceError) {
         console.error('Error fetching space:', spaceError);
         throw spaceError;
+      }
+      
+      // Check if space was found
+      if (!spaceData) {
+        setError('Space not found');
+        setLoading(false);
+        return;
       }
       
       // Fetch space members (without trying to join profiles or personas)
@@ -72,30 +81,30 @@ const SpaceDetails: React.FC<SpaceDetailsProps> = ({ userId, onBack }) => {
         
         // If member has a persona_id, fetch the persona data
         if (member.persona_id) {
-          const { data: persona, error: personaError } = await supabase
+          const { data: personas, error: personaError } = await supabase
             .from('personas')
             .select('id, name, avatar, description, personality, knowledge, tone, instructions')
             .eq('id', member.persona_id)
-            .single();
+            .limit(1);
             
-          if (!personaError) {
-            personaData = persona;
-          } else {
+          if (!personaError && personas && personas.length > 0) {
+            personaData = personas[0];
+          } else if (personaError) {
             console.error('Error fetching persona data:', personaError);
           }
         }
         
         // If member has a user_id, fetch the profile data
         if (member.user_id) {
-          const { data: profile, error: profileError } = await supabase
+          const { data: profiles, error: profileError } = await supabase
             .from('profiles')
             .select('id, display_name, avatar_url, email')
             .eq('id', member.user_id)
-            .single();
+            .limit(1);
             
-          if (!profileError) {
-            profileData = profile;
-          } else {
+          if (!profileError && profiles && profiles.length > 0) {
+            profileData = profiles[0];
+          } else if (profileError) {
             console.error('Error fetching profile data:', profileError);
           }
         }
@@ -240,7 +249,11 @@ const SpaceDetails: React.FC<SpaceDetailsProps> = ({ userId, onBack }) => {
     name: string, 
     description: string, 
     isPublic: boolean,
-    coordinatorInstructions: string 
+    coordinatorInstructions: string,
+    enableImages?: boolean,
+    enablePDFs?: boolean,
+    enableSpreadsheets?: boolean,
+    enableInteractiveElements?: boolean
   }) => {
     if (!space) return;
     
@@ -357,7 +370,7 @@ const SpaceDetails: React.FC<SpaceDetailsProps> = ({ userId, onBack }) => {
 
   const isOwner = space.userId === userId;
   const isAdmin = isOwner || space.members.some(member => 
-    member.user_id === userId && member.role === 'admin'
+    member.userId === userId && member.role === 'admin'
   );
 
   return (
@@ -381,50 +394,124 @@ const SpaceDetails: React.FC<SpaceDetailsProps> = ({ userId, onBack }) => {
           </div>
           
           <div className="flex items-center gap-2">
-            <div className="relative">
+            {/* Mobile menu button */}
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="md:hidden p-2 hover:bg-gray-100 rounded-full"
+              aria-label="Menu"
+            >
+              <Menu size={20} className="text-gray-600" />
+            </button>
+            
+            {/* Desktop buttons */}
+            <div className="hidden md:flex items-center gap-2">
+              <div className="relative">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={showShareTooltip ? <Check size={16} /> : <Share2 size={16} />}
+                  onClick={handleShareSpace}
+                >
+                  Share
+                </Button>
+                {showShareTooltip && (
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded">
+                    Link copied!
+                  </div>
+                )}
+              </div>
               <Button
                 variant="outline"
                 size="sm"
-                leftIcon={showShareTooltip ? <Check size={16} /> : <Share2 size={16} />}
-                onClick={handleShareSpace}
+                leftIcon={<BrainCircuit size={16} />}
+                onClick={() => setActivePanel(activePanel === 'memories' ? null : 'memories')}
+              >
+                Memories
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Users size={16} />}
+                onClick={() => setActivePanel(activePanel === 'members' ? null : 'members')}
+              >
+                Members
+              </Button>
+              
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<Settings size={16} />}
+                  onClick={() => setActivePanel(activePanel === 'settings' ? null : 'settings')}
+                >
+                  Settings
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Mobile menu */}
+        {showMobileMenu && (
+          <div className="md:hidden mt-2 p-2 bg-white border-t border-gray-100 rounded-lg shadow-lg">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Share2 size={16} />}
+                onClick={() => {
+                  handleShareSpace();
+                  setShowMobileMenu(false);
+                }}
+                fullWidth
               >
                 Share
               </Button>
-              {showShareTooltip && (
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded">
-                  Link copied!
-                </div>
-              )}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<BrainCircuit size={16} />}
-              onClick={() => setActivePanel(activePanel === 'memories' ? null : 'memories')}
-            >
-              Memories
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Users size={16} />}
-              onClick={() => setActivePanel(activePanel === 'members' ? null : 'members')}
-            >
-              Members
-            </Button>
-            
-            {isAdmin && (
               <Button
                 variant="outline"
                 size="sm"
-                leftIcon={<Settings size={16} />}
-                onClick={() => setActivePanel(activePanel === 'settings' ? null : 'settings')}
+                leftIcon={<BrainCircuit size={16} />}
+                onClick={() => {
+                  setActivePanel(activePanel === 'memories' ? null : 'memories');
+                  setShowMobileMenu(false);
+                  setShowMobileSidebar(true);
+                }}
+                fullWidth
               >
-                Settings
+                Memories
               </Button>
-            )}
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Users size={16} />}
+                onClick={() => {
+                  setActivePanel(activePanel === 'members' ? null : 'members');
+                  setShowMobileMenu(false);
+                  setShowMobileSidebar(true);
+                }}
+                fullWidth
+              >
+                Members
+              </Button>
+              
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<Settings size={16} />}
+                  onClick={() => {
+                    setActivePanel(activePanel === 'settings' ? null : 'settings');
+                    setShowMobileMenu(false);
+                    setShowMobileSidebar(true);
+                  }}
+                  fullWidth
+                >
+                  Settings
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
         
         <div className="flex items-center mt-2 overflow-x-auto pb-2 gap-2 hide-scrollbar mb-2">
           {space.members.slice(0, 10).map(member => (
@@ -473,7 +560,10 @@ const SpaceDetails: React.FC<SpaceDetailsProps> = ({ userId, onBack }) => {
               size="sm"
               className="ml-2 flex-shrink-0"
               leftIcon={<UserPlus size={14} />}
-              onClick={() => setActivePanel('members')}
+              onClick={() => {
+                setActivePanel('members');
+                setShowMobileSidebar(true);
+              }}
             >
               Add
             </Button>
@@ -491,8 +581,61 @@ const SpaceDetails: React.FC<SpaceDetailsProps> = ({ userId, onBack }) => {
           />
         </div>
         
+        {/* Mobile sidebar */}
+        {activePanel && showMobileSidebar && (
+          <div className="fixed inset-0 z-40 md:hidden">
+            <div className="absolute inset-0 bg-black bg-opacity-25" onClick={() => setShowMobileSidebar(false)}></div>
+            <div className="absolute right-0 top-0 bottom-0 w-80 bg-white shadow-lg flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                <h2 className="font-medium text-gray-900">
+                  {activePanel === 'members' && 'Members'}
+                  {activePanel === 'settings' && 'Settings'}
+                  {activePanel === 'memories' && 'Memories'}
+                </h2>
+                <button
+                  onClick={() => setShowMobileSidebar(false)}
+                  className="p-2 rounded-full hover:bg-gray-100"
+                >
+                  <X size={20} className="text-gray-500" />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-auto">
+                {activePanel === 'members' && (
+                  <SpaceMembersPanel
+                    space={space}
+                    onClose={() => setShowMobileSidebar(false)}
+                    onAddMember={handleAddMember}
+                    onRemoveMember={handleRemoveMember}
+                    currentUserId={userId}
+                    userPersonas={personas}
+                  />
+                )}
+                
+                {activePanel === 'memories' && (
+                  <SpaceMemoriesPanel
+                    spaceId={space.id}
+                    onClose={() => setShowMobileSidebar(false)}
+                  />
+                )}
+                
+                {activePanel === 'settings' && isAdmin && (
+                  <SpaceSettingsPanel
+                    space={space}
+                    onClose={() => setShowMobileSidebar(false)}
+                    onUpdate={handleUpdateSpace}
+                    onDelete={handleDeleteSpace}
+                    isOwner={isOwner}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Desktop sidebars */}
         {activePanel === 'members' && (
-          <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto fixed inset-y-0 right-0 z-10 mt-[133px] pb-[65px] md:mt-0 md:pb-0 md:static md:inset-auto">
+          <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto hidden md:block">
             <SpaceMembersPanel
               space={space}
               onClose={() => setActivePanel(null)}
@@ -505,7 +648,7 @@ const SpaceDetails: React.FC<SpaceDetailsProps> = ({ userId, onBack }) => {
         )}
         
         {activePanel === 'memories' && (
-          <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto fixed inset-y-0 right-0 z-10 mt-[133px] pb-[65px] md:mt-0 md:pb-0 md:static md:inset-auto">
+          <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto hidden md:block">
             <SpaceMemoriesPanel
               spaceId={space.id}
               onClose={() => setActivePanel(null)}
@@ -514,7 +657,7 @@ const SpaceDetails: React.FC<SpaceDetailsProps> = ({ userId, onBack }) => {
         )}
         
         {activePanel === 'settings' && isAdmin && (
-          <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto fixed inset-y-0 right-0 z-10 mt-[133px] pb-[65px] md:mt-0 md:pb-0 md:static md:inset-auto">
+          <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto hidden md:block">
             <SpaceSettingsPanel
               space={space}
               onClose={() => setActivePanel(null)}

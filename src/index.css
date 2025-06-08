@@ -167,3 +167,27 @@ body {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }
+
+/* Horizontal scroll animations */
+.scroll-row {
+  transition: transform 0.3s ease;
+}
+
+/* Card hover effects */
+.card-zoom {
+  transition: transform 0.3s ease;
+}
+
+.card-zoom:hover {
+  transform: scale(1.03);
+}
+
+/* Category highlight */
+.category-highlight {
+  scroll-margin-top: 2rem;
+  transition: background-color 0.5s ease;
+}
+
+.category-highlight:target {
+  background-color: rgba(59, 130, 246, 0.1);
+}

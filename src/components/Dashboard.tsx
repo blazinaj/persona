@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Plus, X, Grid, List, SortAsc, Clock, ChevronRight, Menu, Star, MessageSquare, Sparkles } from 'lucide-react';
+import { Search, Filter, Plus, X, Grid, List, SortAsc, Clock, ChevronRight, Menu, Star, MessageSquare, Sparkles, Eye, Users, Lock } from 'lucide-react';
 import { Persona } from '../types';
 import PersonaCard from './PersonaCard';
 import Button from './ui/Button';
@@ -10,6 +10,7 @@ import { AuthContext } from '../lib/AuthContext';
 import { formatRelativeTime } from '../utils/formatters';
 import { getAvatarUrl } from '../utils/avatarHelpers';
 import { Badge } from './ui/Badge';
+import { useOnboarding } from './onboarding/OnboardingContext';
 
 const VIEW_MODE_KEY = 'persona_view_mode';
 
@@ -35,6 +36,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
+  const { hasCompletedOnboarding } = useOnboarding();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -47,7 +49,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
   const [favorites, setFavorites] = useState<string[]>([]);
   const [recentConversations, setRecentConversations] = useState<any[]>([]);
-  const [loadingConversations, setLoadingConversations] = useState(false);
+  const [recentSpaces, setRecentSpaces] = useState<any[]>([]);
+  const [loadingRecents, setLoadingRecents] = useState(false);
 
   // Save view mode preference when it changes
   useEffect(() => {
@@ -56,7 +59,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   useEffect(() => {
     fetchViewsAndFavorites();
-    fetchRecentConversations();
+    fetchRecentData();
   }, [personas]);
 
   const fetchViewsAndFavorites = async () => {
@@ -88,24 +91,54 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const fetchRecentConversations = async () => {
+  const fetchRecentData = async () => {
     if (!user?.id) return;
     
     try {
-      setLoadingConversations(true);
-      const { data, error } = await supabase
+      setLoadingRecents(true);
+      
+      // Fetch recent conversations
+      const { data: conversations, error: convError } = await supabase
         .from('conversations')
         .select('*, personas(id, name, avatar, visibility)')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
         .limit(5);
 
-      if (error) throw error;
-      setRecentConversations(data || []);
+      if (convError) throw convError;
+      setRecentConversations(conversations || []);
+      
+      // Fetch recent spaces
+      const { data: spaces, error: spacesError } = await supabase
+        .from('space_members')
+        .select(`
+          spaces(
+            id, 
+            name, 
+            description, 
+            is_public, 
+            updated_at, 
+            user_id
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('joined_at', { ascending: false })
+        .limit(5);
+        
+      if (spacesError) throw spacesError;
+      
+      // Format spaces data
+      const formattedSpaces = spaces
+        ?.map(item => item.spaces)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        .slice(0, 3);
+      
+      setRecentSpaces(formattedSpaces || []);
     } catch (error) {
-      console.error('Error fetching recent conversations:', error);
+      console.error('Error fetching recent data:', error);
     } finally {
-      setLoadingConversations(false);
+      setLoadingRecents(false);
     }
   };
 
@@ -131,7 +164,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Get all unique tags from personas
   const allTags = Array.from(
-    new Set(personas.flatMap((persona) => persona.tags))
+    new Set(personas.flatMap((persona) => persona.tags || []))
   );
 
   // Sort personas
@@ -153,11 +186,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const matchesSearch =
       searchTerm === '' ||
       persona.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      persona.description.toLowerCase().includes(searchTerm.toLowerCase());
+      persona.description?.toLowerCase()?.includes(searchTerm.toLowerCase());
 
     const matchesFilters =
       activeFilters.length === 0 ||
-      activeFilters.some((filter) => persona.tags.includes(filter));
+      activeFilters.some((filter) => persona.tags?.includes(filter));
 
     return matchesSearch && matchesFilters;
   });
@@ -175,9 +208,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setSearchTerm('');
   };
 
+  // Add data-testid attributes for onboarding walkthrough
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8 pb-24 md:pb-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 dashboard-header">
         <div className="flex-1 mb-2 md:mb-0">
           <h1 className="text-2xl font-bold text-gray-900">My Personas</h1>
           <div className="flex items-center gap-2">
@@ -195,7 +229,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
             variant="primary" 
             leftIcon={<Plus size={16} />}
             onClick={onCreatePersona}
-            className="hidden sm:flex"
+            className="hidden sm:flex create-persona-button"
+            data-testid="create-persona-button"
           >
             Create New Persona
           </Button>
@@ -203,7 +238,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
             variant="primary"
             leftIcon={<Plus size={16} />}
             onClick={onCreatePersona}
-            className="sm:hidden"
+            className="sm:hidden create-persona-button"
+            data-testid="create-persona-button-mobile"
           >
             Create
           </Button>
@@ -211,19 +247,32 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* Recent Conversations */}
-      {recentConversations.length > 0 && (
+      {!loadingRecents && (recentConversations.length > 0 || recentSpaces.length > 0) && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold text-gray-900">Recent Conversations</h2>
-            <button 
-              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-              onClick={() => navigate('/conversations')}
-            >
-              View all
-            </button>
+            <h2 className="text-lg font-semibold text-gray-900">Recent Activity</h2>
+            <div className="flex items-center gap-3">
+              {recentConversations.length > 3 && (
+                <button 
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  onClick={() => navigate('/conversations')}
+                >
+                  View all conversations
+                </button>
+              )}
+              {recentSpaces.length > 0 && (
+                <button 
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  onClick={() => navigate('/spaces')}
+                >
+                  View all spaces
+                </button>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {recentConversations.slice(0, 3).map(conversation => (
+            {/* Recent Conversations */}
+            {recentConversations.slice(0, 2).map(conversation => (
               <div 
                 key={conversation.id}
                 className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all cursor-pointer p-3"
@@ -248,6 +297,44 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <div className="flex items-center mt-2 text-xs text-gray-500">
                   <MessageSquare size={12} className="mr-1" />
                   <span>Continue conversation</span>
+                </div>
+              </div>
+            ))}
+            
+            {/* Recent Spaces */}
+            {recentSpaces.slice(0, 2).map(space => (
+              <div 
+                key={space.id}
+                className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all cursor-pointer p-3 spaces-section"
+                onClick={() => navigate(`/spaces/${space.id}`)}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="bg-blue-100 p-1.5 rounded-md">
+                    <Users size={14} className="text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-gray-900 text-sm truncate">{space.name}</h3>
+                  </div>
+                  <div className="flex items-center">
+                    {space.is_public ? (
+                      <Badge variant="success\" className="text-xs flex items-center gap-1">
+                        <Eye size={10} />
+                        <span>Public</span>
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs flex items-center gap-1">
+                        <Lock size={10} />
+                        <span>Private</span>
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                {space.description && (
+                  <p className="text-sm text-gray-700 truncate">{space.description}</p>
+                )}
+                <div className="flex items-center mt-2 text-xs text-gray-500">
+                  <Users size={12} className="mr-1" />
+                  <span>View space</span>
                 </div>
               </div>
             ))}
@@ -414,7 +501,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
               : "Get started by creating a new persona."}
           </p>
           <div className="mt-6">
-            <Button variant="primary" leftIcon={<Plus size={16} />} onClick={onCreatePersona}>
+            <Button 
+              variant="primary" 
+              leftIcon={<Plus size={16} />} 
+              onClick={onCreatePersona}
+              className="persona-templates"
+              data-testid="create-first-persona-button"
+            >
               Create New Persona
             </Button>
           </div>
@@ -457,8 +550,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     onDelete={onDeletePersona}
                     onView={(id) => navigate(`/personas/${id}`)}
                     navigate={navigate}
-                    navigate={navigate}
-                    navigate={navigate}
                   />
                 ))}
             </div>
@@ -466,7 +557,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
         
         {/* All Personas or Filtered Results */}
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 persona-personality">
           {activeFilters.length > 0 ? 'Filtered Results' : 'All Personas'}
         </h2>
         <div className={
@@ -494,6 +585,36 @@ export const Dashboard: React.FC<DashboardProps> = ({
           ))}
         </div>
         </>
+      )}
+
+      {/* Show onboarding tips for new users */}
+      {hasCompletedOnboarding && personas.length === 1 && (
+        <div className="mt-8 bg-blue-50 rounded-lg p-4 border border-blue-100">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="text-blue-600" size={20} />
+            <h3 className="text-lg font-medium text-blue-800">Getting Started Tips</h3>
+          </div>
+          <ul className="space-y-2 text-blue-700">
+            <li className="flex items-start gap-2">
+              <div className="rounded-full bg-blue-100 p-1 mt-0.5">
+                <MessageSquare size={14} className="text-blue-600" />
+              </div>
+              <span>Try asking your persona different types of questions to see how it responds.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <div className="rounded-full bg-blue-100 p-1 mt-0.5">
+                <Users size={14} className="text-blue-600" />
+              </div>
+              <span>Create a Space to have multiple personas collaborate together.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <div className="rounded-full bg-blue-100 p-1 mt-0.5">
+                <Star size={14} className="text-blue-600" />
+              </div>
+              <span>Explore public personas created by the community for inspiration.</span>
+            </li>
+          </ul>
+        </div>
       )}
     </div>
   );

@@ -1,5 +1,26 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { CreditCard, Package, Zap, Check, Loader2, Sparkles, TrendingUp, AlertCircle, Clock, Calendar, CreditCard as CreditCardIcon, Shield, RefreshCw, ExternalLink, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { 
+  CreditCard, 
+  Package, 
+  Zap, 
+  Check, 
+  Loader2, 
+  Sparkles, 
+  TrendingUp, 
+  AlertCircle, 
+  Clock, 
+  Calendar, 
+  CreditCard as CreditCardIcon, 
+  Shield, 
+  RefreshCw, 
+  ExternalLink, 
+  CheckCircle, 
+  XCircle, 
+  AlertTriangle,
+  Info,
+  Key
+} from 'lucide-react';
 import { AuthContext } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import Button from '../components/ui/Button';
@@ -46,6 +67,8 @@ interface PaymentMethod {
 
 export const Billing = () => {
   const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const location = useLocation();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
@@ -60,6 +83,9 @@ export const Billing = () => {
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
   const [refreshingData, setRefreshingData] = useState(false);
   const [syncingWithStripe, setSyncingWithStripe] = useState(false);
+  const [multipleSubscriptionsFound, setMultipleSubscriptionsFound] = useState(false);
+  const [stripeConnectionStatus, setStripeConnectionStatus] = useState<'connected' | 'disconnected' | 'unknown'>('unknown');
+  const [showCustomerId, setShowCustomerId] = useState(false);
 
   // Check URL parameters for success/canceled status
   useEffect(() => {
@@ -92,7 +118,7 @@ export const Billing = () => {
       checkTrialEligibility();
       fetchPaymentMethods();
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (subscription && plans.length > 0) {
@@ -138,7 +164,7 @@ export const Billing = () => {
   };
 
   const fetchPaymentMethods = async () => {
-    if (!user || !subscription?.stripe_customer_id || subscription?.stripe_customer_id.startsWith('trial_')) {
+    if (!user?.id || !subscription?.stripe_customer_id || subscription?.stripe_customer_id.startsWith('trial_')) {
       return;
     }
 
@@ -184,43 +210,26 @@ export const Billing = () => {
     }
   };
 
-  const handleClaimTrial = async () => {
-    if (!user) return;
-    
-    setClaimingTrial(true);
-    try {
-      const { data: claimed, error } = await supabase
-        .rpc('claim_free_trial', { user_id_input: user.id });
-        
-      if (error) throw error;
-      
-      if (claimed) {
-        await fetchPlansAndSubscription();
-        await fetchTokenUsage();
-        setCanClaimTrial(false);
-      }
-    } catch (error) {
-      console.error('Error claiming trial:', error);
-    } finally {
-      setClaimingTrial(false);
-    }
-  };
-
   const refreshData = async () => {
     setRefreshingData(true);
+    setError(null);
     try {
       await fetchPlansAndSubscription();
       await fetchTokenUsage();
       await fetchPaymentMethods();
     } catch (error) {
       console.error('Error refreshing data:', error);
+      setError('Failed to refresh subscription data');
     } finally {
       setRefreshingData(false);
     }
   };
 
   const syncWithStripe = async () => {
-    if (!user || !subscription?.stripe_customer_id) return;
+    if (!user || !subscription?.stripe_customer_id) {
+      setError('No subscription found or no Stripe customer ID. Please contact support.');
+      return;
+    }
     
     try {
       setSyncingWithStripe(true);
@@ -262,6 +271,9 @@ export const Billing = () => {
 
   const fetchPlansAndSubscription = async () => {
     try {
+      // Reset error state
+      setError(null);
+      
       // Fetch available plans
       const { data: plansData, error: plansError } = await supabase
         .from('subscription_plans')
@@ -280,17 +292,44 @@ export const Billing = () => {
       setPlans(validPlans);
 
       // Fetch user's subscription
-      const { data: subData, error: subError } = await supabase
+      const { data: subscriptionsData, error: subsError } = await supabase
         .from('subscriptions')
         .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .eq('user_id', user.id);
 
-      if (subError) throw subError;
-      setSubscription(subData || null);
+      if (subsError) throw subsError;
+
+      // Check for multiple subscriptions (error case)
+      if (subscriptionsData && subscriptionsData.length > 1) {
+        setMultipleSubscriptionsFound(true);
+        // Use the most recent one
+        const mostRecent = subscriptionsData.sort((a, b) => 
+          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        )[0];
+        setSubscription(mostRecent);
+        setError('Multiple subscriptions found for your account. Please contact support.');
+      } else if (subscriptionsData && subscriptionsData.length === 1) {
+        setSubscription(subscriptionsData[0]);
+        
+        // Check Stripe connection status
+        if (subscriptionsData[0].stripe_customer_id && 
+            !subscriptionsData[0].stripe_customer_id.startsWith('trial_')) {
+          setStripeConnectionStatus('connected');
+        } else if (subscriptionsData[0].plan_id === 'trial') {
+          // Trial doesn't need Stripe connection
+          setStripeConnectionStatus('connected');
+        } else {
+          setStripeConnectionStatus('disconnected');
+        }
+      } else {
+        // No subscription found
+        setSubscription(null);
+        setStripeConnectionStatus('disconnected');
+      }
     } catch (error) {
       console.error('Error fetching billing data:', error);
       setError('Unable to load subscription plans. Please try again later.');
+      setStripeConnectionStatus('unknown');
     } finally {
       setLoading(false);
     }
@@ -418,6 +457,57 @@ export const Billing = () => {
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
             <AlertCircle size={16} />
             <span>{error}</span>
+          </div>
+        )}
+
+        {/* Stripe connection status */}
+        {stripeConnectionStatus === 'disconnected' && subscription && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={20} className="text-amber-600 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="font-medium text-amber-800">Stripe Connection Issue Detected</h3>
+                <p className="text-amber-700 mt-1">
+                  Your subscription is not properly connected to Stripe. This may affect billing and service access.
+                </p>
+                <Button
+                  variant="primary" 
+                  size="sm"
+                  leftIcon={syncingWithStripe ? <Loader2 className="animate-spin" /> : <RefreshCw size={16} />}
+                  onClick={syncWithStripe}
+                  disabled={syncingWithStripe}
+                  className="mt-3"
+                >
+                  {syncingWithStripe ? "Syncing..." : "Sync with Stripe"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Multiple subscriptions warning */}
+        {multipleSubscriptionsFound && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="font-medium text-red-800">Multiple Subscriptions Detected</h3>
+                <p className="text-red-700 mt-1">
+                  We found multiple subscription records associated with your account. 
+                  This is an unusual situation that needs attention. Please contact support 
+                  to resolve this issue. We're currently showing your most recent subscription.
+                </p>
+                <Button
+                  variant="outline" 
+                  size="sm"
+                  leftIcon={<ExternalLink size={16} />}
+                  onClick={() => window.open('mailto:support@personify.mobi', '_blank')}
+                  className="mt-3"
+                >
+                  Contact Support
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -566,6 +656,54 @@ export const Billing = () => {
                     <div className="text-sm text-gray-600 mt-1">
                       Next billing: {new Date(subscription.current_period_end).toLocaleDateString()}
                     </div>
+                    {/* Stripe connection indicator */}
+                    <div className="mt-2 flex items-center gap-1.5">
+                      {stripeConnectionStatus === 'connected' ? (
+                        <Badge variant="success\" className="flex items-center gap-1 text-xs">
+                          <CheckCircle size={12} />
+                          <span>Stripe Connected</span>
+                        </Badge>
+                      ) : (
+                        <Badge variant="danger" className="flex items-center gap-1 text-xs">
+                          <XCircle size={12} />
+                          <span>Stripe Disconnected</span>
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stripe Customer ID Display */}
+                <div className="mt-6 pt-4 border-t border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <Key size={16} className="text-gray-500" />
+                      <span>Stripe Customer ID:</span>
+                      <div className="relative">
+                        <code className="bg-gray-100 px-2 py-1 rounded text-sm font-mono">
+                          {showCustomerId 
+                            ? subscription.stripe_customer_id || 'Not available'
+                            : subscription.stripe_customer_id 
+                              ? `${subscription.stripe_customer_id.substring(0, 8)}...${subscription.stripe_customer_id.substring(subscription.stripe_customer_id.length - 4)}`
+                              : 'Not available'
+                          }
+                        </code>
+                        <button 
+                          onClick={() => setShowCustomerId(!showCustomerId)}
+                          className="ml-2 text-blue-600 hover:text-blue-800 text-xs"
+                        >
+                          {showCustomerId ? 'Hide' : 'Show Full'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {subscription.stripe_customer_id && 
+                       !subscription.stripe_customer_id.startsWith('trial_') &&
+                       <Badge variant="primary\" className="flex items-center gap-1 text-xs">
+                        <Info size={12} />
+                        <span>Valid Customer ID</span>
+                      </Badge>}
+                    </div>
                   </div>
                 </div>
 
@@ -573,6 +711,7 @@ export const Billing = () => {
                   <Button
                     variant="primary"
                     onClick={handleManageSubscription}
+                    disabled={stripeConnectionStatus !== 'connected' || !subscription.stripe_customer_id || subscription.stripe_customer_id.startsWith('trial_')}
                   >
                     Manage Subscription
                   </Button>
@@ -671,7 +810,49 @@ export const Billing = () => {
               </CardContent>
             </Card>
           </div>
-        ) : null}
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center mb-8">
+            <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
+              <CreditCardIcon className="h-6 w-6 text-blue-600" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">No Subscription Found</h3>
+            <p className="text-gray-600 max-w-md mx-auto mb-6">
+              You don't have an active subscription. Choose one of our plans below to get started.
+              {canClaimTrial && <span className="block mt-2 font-medium text-blue-600">You're eligible for a free trial!</span>}
+            </p>
+            {canClaimTrial && (
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  if (!user) return;
+                  
+                  setClaimingTrial(true);
+                  try {
+                    const { data: claimed, error } = await supabase.rpc('claim_free_trial', {
+                      user_id_input: user.id,
+                    });
+                      
+                    if (error) throw error;
+                    
+                    if (claimed) {
+                      await fetchPlansAndSubscription();
+                      setCanClaimTrial(false);
+                    }
+                  } catch (error) {
+                    console.error('Error claiming trial:', error);
+                    setError('Failed to claim free trial. Please try again.');
+                  } finally {
+                    setClaimingTrial(false);
+                  }
+                }}
+                disabled={claimingTrial}
+                loading={claimingTrial}
+              >
+                Start Free Trial
+              </Button>
+            )}
+          </div>
+        )}
 
         <div className="flex justify-center mb-8">
           <div className="bg-gray-100 p-1 rounded-lg inline-flex">

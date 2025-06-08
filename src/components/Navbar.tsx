@@ -49,6 +49,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
     }
   };
 
+  // Close all dropdowns when navigating
+  const handleNavigation = (path: string) => {
+    navigate(path);
+    setShowUserMenu(false); // Close the user menu
+    setShowQuickActions(false); // Close quick actions menu
+    setIsMenuOpen(false); // Close mobile menu if open
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    setShowUserMenu(false);
+    setIsMenuOpen(false);
+    navigate('/login');
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full bg-white border-b border-gray-200 safe-top">
       <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8">
@@ -131,7 +146,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
                           <button
                             key={persona.id}
                             onClick={() => {
-                              navigate(`/personas/${persona.id}`);
+                              handleNavigation(`/personas/${persona.id}`);
                               setShowQuickActions(false);
                             }}
                             className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -150,7 +165,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
                         <div className="border-t border-gray-100 my-1"></div>
                         <button
                           onClick={() => {
-                            navigate('/');
+                            handleNavigation('/');
                             setShowQuickActions(false);
                           }}
                           className="flex w-full items-center px-4 py-2 text-sm text-blue-600 hover:bg-gray-100"
@@ -193,14 +208,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
                   <div className="px-4 py-3 border-b border-gray-100">
                     <p className="text-sm font-medium text-gray-900">{user.email}</p>
                   </div>
-                  <Link to="/profile" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                  <Link 
+                    to="/profile" 
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setShowUserMenu(false)}
+                  >
                     <User size={16} className="mr-2" /> Your Profile
                   </Link>
-                  <Link to="/settings" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                  <Link 
+                    to="/settings" 
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setShowUserMenu(false)}
+                  >
                     <Settings size={16} className="mr-2" /> Settings
                   </Link>
                   <button
-                    onClick={signOut}
+                    onClick={handleSignOut}
                     className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   >
                     <LogOut size={16} className="mr-2" /> Sign out
@@ -279,7 +302,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
                 <Button
                   variant="primary"
                   fullWidth
-                  onClick={toggleQuickActions}
+                  onClick={() => {
+                    toggleQuickActions();
+                    setIsMenuOpen(false); // Close the mobile menu when opening quick actions
+                  }}
                   className="mt-1"
                   rightIcon={<ChevronDown size={16} />}
                 >
@@ -311,7 +337,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
                           <button
                             key={persona.id}
                             onClick={() => {
-                              navigate(`/personas/${persona.id}`);
+                              handleNavigation(`/personas/${persona.id}`);
                               setIsMenuOpen(false);
                               setShowQuickActions(false);
                             }}
@@ -330,7 +356,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
                         <div className="border-t border-gray-200 my-2"></div>
                         <button
                           onClick={() => {
-                            navigate('/');
+                            handleNavigation('/');
                             setIsMenuOpen(false);
                             setShowQuickActions(false);
                           }}
@@ -361,8 +387,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
                       fullWidth
                       leftIcon={<User size={14} />}
                       onClick={() => {
-                        navigate('/profile');
-                        setIsMenuOpen(false);
+                        handleNavigation('/profile');
                       }}
                     >
                       Profile
@@ -373,8 +398,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
                       fullWidth
                       leftIcon={<Settings size={14} />}
                       onClick={() => {
-                        navigate('/settings');
-                        setIsMenuOpen(false);
+                        handleNavigation('/settings');
                       }}
                     >
                       Settings
@@ -384,10 +408,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onCreatePersona, onSignIn }) => 
                       size="sm"
                       fullWidth
                       leftIcon={<LogOut size={14} />}
-                      onClick={() => {
-                        signOut();
-                        setIsMenuOpen(false);
-                      }}
+                      onClick={handleSignOut}
                       className="col-span-2"
                     >
                       Sign Out

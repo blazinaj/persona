@@ -1,189 +1,101 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
-import { OpenAI } from 'npm:openai@4.29.1';
+// Handler for /personas endpoints (GET, POST)
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { getUserIdFromRequest } from '../api-middleware.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
-};
-
-const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-const openai = new OpenAI({
-  apiKey: Deno.env.get('OPENAI_API_KEY')
-});
-
-Deno.serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  try {
-    const url = new URL(req.url);
-    const path = url.pathname.split('/').filter(Boolean);
-    const personaId = path[1]; // /personas/:id
-
-    // Get user ID from auth header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Unauthorized');
+export async function handlePersonas(req: Request): Promise<Response> {
+  // Create Supabase client with admin privileges 
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL') || '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  );
+  
+  // Get user ID from request (set by middleware)
+  const userId = getUserIdFromRequest(req);
+  
+  // Handle GET request to list personas
+  if (req.method === 'GET') {
+    try {
+      const { data, error } = await supabase
+        .from('personas')
+        .select('*')
+        .eq('user_id', userId);
+        
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify(data || []),
+        { headers: { 'Content-Type': 'application/json' }}
+      );
+    } catch (error) {
+      console.error('Error fetching personas:', error);
+      return new Response(
+        JSON.stringify({ error: error.message || 'Failed to fetch personas' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' }}
+      );
     }
-
-    // Extract token from auth header
-    const token = authHeader.replace('Bearer ', '');
-    
-    // Check if this is an API key
-    const { data: apiKey, error: apiKeyError } = await supabase
-      .from('api_keys')
-      .select('user_id')
-      .eq('key', token)
-      .eq('is_active', true)
-      .maybeSingle();
-    
-    let userId;
-    
-    if (apiKey) {
-      // Use the user ID associated with the API key
-      userId = apiKey.user_id;
-    } else {
-      // Try to get user from JWT token
-      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-      if (userError || !user) {
-        throw new Error('Unauthorized');
+  }
+  
+  // Handle POST request to create a new persona
+  if (req.method === 'POST') {
+    try {
+      const requestData = await req.json();
+      
+      // Validate required fields
+      if (!requestData.name) {
+        return new Response(
+          JSON.stringify({ error: 'Persona name is required' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' }}
+        );
       }
       
-      userId = user.id;
-    }
-
-    // Route handling
-    switch (req.method) {
-      case 'GET': {
-        if (personaId) {
-          // Get single persona
-          const { data, error } = await supabase
-            .from('personas')
-            .select('*')
-            .eq('id', personaId)
-            .single();
-
-          if (error) throw error;
-          return new Response(JSON.stringify(data), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        } else {
-          // List personas
-          const { data, error } = await supabase
-            .from('personas')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
-
-          if (error) throw error;
-          return new Response(JSON.stringify(data), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
+      // Prepare data for insertion
+      const personaData = {
+        name: requestData.name,
+        description: requestData.description || null,
+        avatar: requestData.avatar || null,
+        tags: requestData.tags || [],
+        personality: requestData.personality || [],
+        knowledge: requestData.knowledge || [],
+        tone: requestData.tone || 'neutral',
+        examples: requestData.examples || [],
+        instructions: requestData.instructions || '',
+        visibility: requestData.visibility || 'private',
+        voice: requestData.voice || {},
+        user_id: userId
+      };
+      
+      // Insert new persona
+      const { data, error } = await supabase
+        .from('personas')
+        .insert([personaData])
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Persona created successfully',
+          persona: data
+        }),
+        { 
+          status: 201, 
+          headers: { 'Content-Type': 'application/json' }
         }
-      }
-
-      case 'POST': {
-        if (personaId && path[2] === 'chat') {
-          // Chat with persona
-          const { messages } = await req.json();
-
-          // Get persona details
-          const { data: persona, error: personaError } = await supabase
-            .from('personas')
-            .select('*')
-            .eq('id', personaId)
-            .single();
-
-          if (personaError) throw personaError;
-
-          // Create chat completion
-          const completion = await openai.chat.completions.create({
-            model: 'gpt-4',
-            messages: [
-              {
-                role: 'system',
-                content: `You are an AI assistant with the following characteristics:
-- Personality traits: ${persona.personality?.join(', ') || 'helpful, friendly'}
-- Knowledge areas: ${persona.knowledge?.join(', ') || 'general knowledge'}
-- Communication style: ${persona.tone || 'neutral'}`
-              },
-              ...messages
-            ],
-            temperature: 0.7
-          });
-
-          return new Response(
-            JSON.stringify({ message: completion.choices[0].message.content }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        } else {
-          // Create new persona
-          const data = await req.json();
-          const { error } = await supabase
-            .from('personas')
-            .insert([{
-              ...data,
-              user_id: userId
-            }]);
-
-          if (error) throw error;
-          return new Response(JSON.stringify({ success: true }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        }
-      }
-
-      case 'PUT': {
-        if (!personaId) throw new Error('Missing persona ID');
-
-        // Update persona
-        const data = await req.json();
-        const { error } = await supabase
-          .from('personas')
-          .update(data)
-          .eq('id', personaId)
-          .eq('user_id', userId);
-
-        if (error) throw error;
-        return new Response(JSON.stringify({ success: true }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      case 'DELETE': {
-        if (!personaId) throw new Error('Missing persona ID');
-
-        // Delete persona
-        const { error } = await supabase
-          .from('personas')
-          .delete()
-          .eq('id', personaId)
-          .eq('user_id', userId);
-
-        if (error) throw error;
-        return new Response(JSON.stringify({ success: true }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      default:
-        throw new Error(`Method ${req.method} not allowed`);
+      );
+    } catch (error) {
+      console.error('Error creating persona:', error);
+      return new Response(
+        JSON.stringify({ error: error.message || 'Failed to create persona' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' }}
+      );
     }
-  } catch (error) {
-    console.error('API error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        status: error.message === 'Unauthorized' ? 401 : 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
   }
-});
+  
+  // If we get here, method is not supported
+  return new Response(
+    JSON.stringify({ error: `Method ${req.method} not allowed` }),
+    { status: 405, headers: { 'Content-Type': 'application/json' }}
+  );
+}
